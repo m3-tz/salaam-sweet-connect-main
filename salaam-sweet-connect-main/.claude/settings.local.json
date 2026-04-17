@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\salaam-sweet-connect/src/pages/admin\"/*.tsx)",
+      "Bash(wc -l src/pages/admin/*.tsx)",
+      "Bash(xargs wc:*)",
+      "Bash(find D:D.Dtuwiaq.MOTAZpythonProject -name *.py -type f)",
+      "Read(//d/D.D/tuwiaq.MOTAZ/Clade/**)",
+      "Bash(python3:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(copy \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\Python_Lab\\\\app.py\" \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\salaam-sweet-connect\\\\backend\\\\app.py\")",
+      "Bash(copy \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\Python_Lab\\\\email_service.py\" \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\salaam-sweet-connect\\\\backend\\\\email_service.py\")",
+      "Bash(cp \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\Python_Lab\\\\app.py\" \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\salaam-sweet-connect\\\\backend\\\\app.py\")",
+      "Bash(cp \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\Python_Lab\\\\email_service.py\" \"D:\\\\D.D\\\\tuwiaq.MOTAZ\\\\salaam-sweet-connect\\\\backend\\\\email_service.py\")"
+    ]
+  }
+}

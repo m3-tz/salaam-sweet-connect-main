@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npx vite:*)",
+      "Bash(npx tsc:*)",
+      "Bash(find C:Usersm3tz9Downloadssalaam-sweet-connect-mainsalaam-sweet-connect-mainbackend -name *.py -not -path *__pycache__*)",
+      "Bash(dir \"C:\\\\Users\\\\m3tz9\\\\Downloads\\\\salaam-sweet-connect-main\\\\salaam-sweet-connect-main\\\\src\\\\pages\\\\student\" /b)",
+      "Bash(grep -r 'CREATE TABLE' /c/Users/m3tz9/Downloads/salaam-sweet-connect-main/salaam-sweet-connect-main --include=*.py --include=*.sql)",
+      "Bash(grep -v \"import\\\\|can_view\\\\|//\")",
+      "Bash(xargs grep:*)",
+      "Bash(grep -E \"\\\\.tsx$\")",
+      "Bash(python -c ':*)"
+    ]
+  }
+}
