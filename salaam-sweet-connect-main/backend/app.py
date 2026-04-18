@@ -13,6 +13,7 @@ from routes.batches       import batches_bp
 from routes.admin         import admin_bp
 from routes.permissions   import permissions_bp
 from routes.item_requests import item_requests_bp
+from utils.limiter        import limiter
 
 # الـ origins المسموح بها — عدّلها لتطابق نطاقك الفعلي في الإنتاج
 _ALLOWED_ORIGINS = os.environ.get(
@@ -26,6 +27,17 @@ def create_app() -> Flask:
 
     # ── حجم الطلب الأقصى: 2 MB ────────────────────────────────────────────
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
+
+    # ── Rate limiting ──────────────────────────────────────────────────────
+    limiter.init_app(app)
+
+    @app.errorhandler(429)
+    def rate_limit_exceeded(_):
+        return jsonify({
+            'status':  'error',
+            'message': 'تجاوزت الحد المسموح من الطلبات، انتظر قليلاً ثم أعد المحاولة.',
+            'blocked': False,
+        }), 429
 
     # ── CORS: فقط origins المعروفة ────────────────────────────────────────
     CORS(app, resources={r'/api/*': {

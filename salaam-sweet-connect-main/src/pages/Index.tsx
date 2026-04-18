@@ -92,11 +92,11 @@ const Index = () => {
 
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto text-center mb-10">
-          <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-4">مرحباً بك في معمل الابتكار 👋</h2>
+          <h2 className="text-2xl sm:text-4xl font-black text-slate-800 dark:text-white mb-4">مرحباً بك في معمل الابتكار 👋</h2>
           <p className="text-slate-600 dark:text-slate-400 font-medium">استكشف القطع الإلكترونية والمعدات المتوفرة لمشروعك القادم.</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 mb-10 space-y-6">
+        <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 mb-10 space-y-6">
           <div className="relative">
             <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -124,7 +124,7 @@ const Index = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6">
           {loading ? (
             <div className="col-span-full py-20 flex justify-center">
               <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>

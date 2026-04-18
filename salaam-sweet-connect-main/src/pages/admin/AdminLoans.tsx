@@ -668,7 +668,7 @@ Please contact the lab admin for more details.`
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm animate-in fade-in duration-500 transition-colors">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-x-auto shadow-sm animate-in fade-in duration-500 transition-colors">
         <Table>
           <TableHeader className="bg-slate-50 dark:bg-slate-950 transition-colors">
             <TableRow className="border-slate-200 dark:border-slate-800">
@@ -981,7 +981,7 @@ Please contact the lab admin for more details.`
               )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 sm:gap-6">
               <div className="lg:col-span-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col h-[500px]">
                 <div className="flex flex-col gap-3 mb-4 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <h3 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2"><Layers className="w-4 h-4 text-blue-500"/> {t('1. تصفح واختر القطع', '1. Browse & Select Items')}</h3>

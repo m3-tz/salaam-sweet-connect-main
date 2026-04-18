@@ -738,11 +738,11 @@ const AdminAuditLogs = () => {
                               onClick={() => setSelectedUser(log.user_name)}
                               className="flex items-center gap-1.5 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                             >
-                              <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 text-[9px] font-black border border-blue-200 dark:border-blue-800">
+                              <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 text-[10px] font-black border border-blue-200 dark:border-blue-800">
                                 {log.user_name.charAt(0)}
                               </div>
                               <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{log.user_name}</span>
-                              <span className="text-[9px] font-mono text-slate-400 dark:text-slate-500">{log.user_id}</span>
+                              <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">{log.user_id}</span>
                             </button>
                           </div>
                           <p className="text-sm text-slate-600 dark:text-slate-300 font-medium leading-relaxed">{log.details}</p>

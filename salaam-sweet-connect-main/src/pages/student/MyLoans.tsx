@@ -420,8 +420,8 @@ const MyLoans = () => {
                       </div>
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                          <span className="text-xs font-black text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 px-3 py-1 rounded-lg">x{item.requestedQuantity}</span>
-                         {selectedRequest.status === 'approved' && <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded"><CheckCircle2 className="w-3 h-3"/> {t('معتمد', 'Apprvd')}</span>}
-                         {selectedRequest.status === 'rejected' && <span className="text-[9px] font-bold text-red-600 dark:text-red-400 flex items-center gap-0.5 bg-red-50 dark:bg-red-900/30 px-1.5 py-0.5 rounded"><XCircle className="w-3 h-3"/> {t('مرفوض', 'Rjctd')}</span>}
+                         {selectedRequest.status === 'approved' && <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded"><CheckCircle2 className="w-3 h-3"/> {t('معتمد', 'Apprvd')}</span>}
+                         {selectedRequest.status === 'rejected' && <span className="text-[10px] font-bold text-red-600 dark:text-red-400 flex items-center gap-0.5 bg-red-50 dark:bg-red-900/30 px-1.5 py-0.5 rounded"><XCircle className="w-3 h-3"/> {t('مرفوض', 'Rjctd')}</span>}
                       </div>
                     </div>
                   ))}

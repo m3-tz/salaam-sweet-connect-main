@@ -407,7 +407,7 @@ const AdminCamps = () => {
   return (
     <div className="space-y-6 pb-10 font-sans transition-colors" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex justify-between items-center mb-6 border-b border-slate-200 dark:border-slate-800 pb-4 transition-colors">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6 border-b border-slate-200 dark:border-slate-800 pb-4 transition-colors">
         <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
           <Tent className="w-6 h-6 text-blue-600" /> {t('إدارة المعسكرات والفعاليات', 'Camps & Events Management')}
         </h2>
@@ -417,7 +417,7 @@ const AdminCamps = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
           <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center shrink-0">
             <Tent className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -492,7 +492,7 @@ const AdminCamps = () => {
         </div>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-3 sm:gap-6">
         {filteredCamps.length === 0 ? (
           <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 transition-colors">
             <Tent className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
@@ -593,7 +593,7 @@ const AdminCamps = () => {
                                 </div>
                               </div>
                               <div className="shrink-0 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded-lg border dark:border-slate-700">
-                                <span className="text-[9px] font-bold text-slate-400">{t('الكمية', 'Qty')}</span>
+                                <span className="text-[10px] font-bold text-slate-400">{t('الكمية', 'Qty')}</span>
                                 <span className={`text-sm font-black ${camp.status === 'returned' ? 'text-slate-500 line-through' : 'text-blue-700 dark:text-blue-400'}`}>{item.quantity}</span>
                               </div>
                             </div>
@@ -632,7 +632,7 @@ const AdminCamps = () => {
             </div>
 
             {!isEditMode && (
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 sm:gap-6">
                 <div className="lg:col-span-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col h-[500px]">
                   <div className="flex flex-col gap-3 mb-4 border-b border-slate-100 dark:border-slate-800 pb-4">
                     <h3 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2"><Layers className="w-4 h-4 text-blue-500"/> {t('1. تصفح واختر القطع', '1. Browse & Select Items')}</h3>

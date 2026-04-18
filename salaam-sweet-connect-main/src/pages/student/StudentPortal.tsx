@@ -232,9 +232,9 @@ const StudentPortal = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-800 dark:from-slate-800 dark:via-blue-900 dark:to-indigo-950 rounded-3xl p-8 sm:p-10 mb-6 text-white shadow-xl relative overflow-hidden transition-colors">
+        <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-800 dark:from-slate-800 dark:via-blue-900 dark:to-indigo-950 rounded-3xl p-5 sm:p-10 mb-6 text-white shadow-xl relative overflow-hidden transition-colors">
           <div className="relative z-10 max-w-2xl">
-            <h2 className="text-3xl sm:text-4xl font-black mb-2 drop-shadow-md">{t('مرحباً بك،', 'Welcome,')} {user.name} 👋</h2>
+            <h2 className="text-xl sm:text-3xl lg:text-4xl font-black mb-2 drop-shadow-md">{t('مرحباً بك،', 'Welcome,')} {user.name} 👋</h2>
             <p className="text-blue-200 font-mono text-xs mb-3 opacity-80">{user.id}</p>
             <p className="text-blue-100 dark:text-blue-200 font-medium text-lg leading-relaxed drop-shadow-sm">{t('تصفح الكتالوج الهندسي واطلب القطع التي تحتاجها لمشروعك بضغطة زر. نحن هنا لدعم ابتكارك.', 'Browse the engineering catalog and request items for your project with a single click. We are here to support your innovation.')}</p>
             {/* شارات صلاحيات الدفعة */}
@@ -306,7 +306,7 @@ const StudentPortal = () => {
             <p className="text-slate-400 dark:text-slate-500 font-medium mt-2">{t('جرب البحث بكلمات أخرى أو اختر تصنيفاً مختلفاً', 'Try searching with different keywords or select another category')}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
             {filteredItems.map((item, index) => {
               const inCart = cart.find(c => getNameAr(c.component) === getNameAr(item));
               return (

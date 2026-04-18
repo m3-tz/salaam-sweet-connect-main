@@ -182,7 +182,7 @@ const StudentItemRequests = () => {
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* Hero + CTA */}
-        <div className="bg-gradient-to-r from-purple-700 via-indigo-600 to-blue-700 dark:from-slate-800 dark:via-purple-900 dark:to-indigo-950 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="bg-gradient-to-r from-purple-700 via-indigo-600 to-blue-700 dark:from-slate-800 dark:via-purple-900 dark:to-indigo-950 rounded-3xl p-4 sm:p-8 text-white shadow-xl relative overflow-hidden">
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">

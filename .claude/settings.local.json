@@ -11,7 +11,14 @@
       "Bash(grep -v \"import\\\\|can_view\\\\|//\")",
       "Bash(xargs grep:*)",
       "Bash(grep -E \"\\\\.tsx$\")",
-      "Bash(python -c ':*)"
+      "Bash(python -c ':*)",
+      "Bash(python -c \"import routes.admin; print\\('admin.py OK'\\)\")",
+      "Bash(pip install:*)",
+      "Read(//c/Users/m3tz9/Downloads/**)",
+      "Bash(ls -lah \"Tuwaiq Lab Design System.zip\")",
+      "Bash(unzip -l \"C:\\\\Users\\\\m3tz9\\\\Downloads\\\\Tuwaiq Lab Design System.zip\")",
+      "Bash(cd /tmp)",
+      "Bash(unzip -q \"C:\\\\Users\\\\m3tz9\\\\Downloads\\\\Tuwaiq Lab Design System.zip\")"
     ]
   }
 }

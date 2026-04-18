@@ -523,7 +523,7 @@ const AdminRequests = () => {
                                 <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg px-3 py-2">
                                   <Hash className="w-4 h-4 text-slate-400 shrink-0"/>
                                   <div>
-                                    <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">{t('الرقم المُدخل','Entered ID')}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">{t('الرقم المُدخل','Entered ID')}</p>
                                     <p className="font-mono font-bold text-slate-700 dark:text-slate-300 text-sm">{req.universityId || '—'}</p>
                                   </div>
                                 </div>
@@ -531,7 +531,7 @@ const AdminRequests = () => {
                                   <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900 rounded-lg px-3 py-2">
                                     <BookOpen className="w-4 h-4 text-blue-500 shrink-0"/>
                                     <div>
-                                      <p className="text-[9px] font-bold text-blue-400 uppercase">{t('الدفعة','Batch')}</p>
+                                      <p className="text-[10px] font-bold text-blue-400 uppercase">{t('الدفعة','Batch')}</p>
                                       <p className="font-bold text-blue-700 dark:text-blue-300 text-sm">{req.batch_name}</p>
                                     </div>
                                   </div>

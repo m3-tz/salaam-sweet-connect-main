@@ -80,7 +80,7 @@ const ComponentDetail = () => {
             <div className="relative flex items-center justify-center p-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 cursor-pointer" onClick={() => navigate('/student')}>
               <ShoppingCart className="w-5 h-5" />
               {totalCartItems > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow-sm">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full shadow-sm">
                   {totalCartItems}
                 </span>
               )}
@@ -97,10 +97,10 @@ const ComponentDetail = () => {
           <span className="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 rounded-md border border-blue-100 dark:border-blue-900 shadow-sm">{lang === 'ar' ? getCatAr(item) : getCatEn(item)}</span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-start">
 
           {/* 🖼️ 1. منطقة عرض الصورة */}
-          <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none p-8 relative flex items-center justify-center aspect-square lg:h-[550px] overflow-hidden group transition-colors">
+          <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-none p-4 sm:p-8 relative flex items-center justify-center aspect-square lg:h-[550px] overflow-hidden group transition-colors">
             {/* خلفية متدرجة خفيفة */}
             <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-white dark:from-slate-800 dark:to-slate-900 opacity-80 transition-colors"></div>
 
@@ -123,7 +123,7 @@ const ComponentDetail = () => {
           {/* 📝 2. تفاصيل القطعة */}
           <div className="flex flex-col h-full justify-center">
 
-            <h2 className="text-3xl md:text-5xl font-black text-slate-800 dark:text-white mb-8 leading-tight tracking-tight transition-colors">
+            <h2 className="text-2xl sm:text-3xl md:text-5xl font-black text-slate-800 dark:text-white mb-5 sm:mb-8 leading-tight tracking-tight transition-colors">
               {displayCompName(item)}
             </h2>
 

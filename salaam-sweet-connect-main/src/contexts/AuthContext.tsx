@@ -1,21 +1,21 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { apiUrl } from '@/lib/api';
 
-// تم تعديل الواجهة لتطابق استهلاك ملفاتك للبيانات
 export interface User {
   id: string;
   name: string;
-  role: string; // سنخزن فيه "مهندس" أو "مشرف" أو "admin" كما هي في الداتا بيس
+  role: string;
+  session_token?: string;
   can_view_locations?: boolean;
   can_borrow?: boolean;
   auto_approve?: boolean;
-  permissions?: string[]; // RBAC صلاحيات المستخدم
+  permissions?: string[];
 }
 
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string; blocked?: boolean }>;
-  logout: () => void;
+  logout: (reason?: 'session_expired' | 'inactivity') => void;
   isLoading: boolean;
   hasPermission: (perm: string) => boolean;
   refreshPermissions: () => Promise<void>;
@@ -23,9 +23,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// مدة الخمول قبل الطرد: 20 دقيقة
+const INACTIVITY_MS       = 20 * 60 * 1000; // 20 دقيقة خمول
+const PING_INTERVAL_MS    =  2 * 60 * 1000; // ping كل دقيقتين
+const SESSION_CHECK_MS    =      10 * 1000; // فحص الجلسة كل 10 ثواني
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // استرجاع الجلسة المحفوظة
   useEffect(() => {
@@ -40,7 +46,56 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsLoading(false);
   }, []);
 
-  // ── Presence ping: أرسل كل دقيقتين لتحديث last_seen ────────────────────
+  // ── تسجيل الخروج مع حفظ السبب ────────────────────────────────────────
+  const logout = useCallback((reason?: 'session_expired' | 'inactivity') => {
+    if (reason) localStorage.setItem('logout_reason', reason);
+    setUser(null);
+    localStorage.removeItem('lab_user');
+  }, []);
+
+  // ── تايمر الخمول: 20 دقيقة بدون نشاط → خروج تلقائي ─────────────────
+  useEffect(() => {
+    if (!user) return;
+
+    const resetTimer = () => {
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      inactivityTimer.current = setTimeout(() => {
+        logout('inactivity');
+      }, INACTIVITY_MS);
+    };
+
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
+    resetTimer(); // ابدأ العداد فوراً
+
+    return () => {
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+    };
+  }, [user?.id, logout]);
+
+  // ── فحص الجلسة كل 10 ثواني — يطرد الجلسة القديمة فوراً ─────────────
+  useEffect(() => {
+    if (!user?.session_token) return;
+
+    const checkSession = () => {
+      const params = new URLSearchParams({ uid: user.id, token: user.session_token! });
+      fetch(apiUrl(`/api/session/check?${params}`))
+        .then(r => r.json())
+        .then(data => {
+          if (!data.valid && data.reason === 'session_expired') {
+            logout('session_expired');
+          }
+        })
+        .catch(() => {});
+    };
+
+    // لا تبدأ الفحص فوراً — انتظر 10 ثواني أول مرة
+    const interval = setInterval(checkSession, SESSION_CHECK_MS);
+    return () => clearInterval(interval);
+  }, [user?.id, user?.session_token, logout]);
+
+  // ── Presence ping: كل دقيقتين لتحديث last_seen ───────────────────────
   useEffect(() => {
     if (!user) return;
 
@@ -49,22 +104,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       fetch(apiUrl('/api/ping'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ universityId: user.id, userName: user.name, role: user.role, page }),
-      }).catch(() => {});
+        body: JSON.stringify({
+          universityId: user.id,
+          userName: user.name,
+          role: user.role,
+          page,
+          sessionToken: user.session_token || '',
+        }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'session_expired') {
+            logout('session_expired');
+          }
+        })
+        .catch(() => {});
     };
 
-    sendPing(); // ping فوري عند تسجيل الدخول أو تحديث الصفحة
-    const interval = setInterval(sendPing, 2 * 60 * 1000); // كل دقيقتين
+    sendPing();
+    const interval = setInterval(sendPing, PING_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [user?.id]);
-  // ─────────────────────────────────────────────────────────────────────────
+  }, [user?.id, logout]);
 
-  // ── RBAC: تحميل الصلاحيات تلقائياً عند فتح التطبيق أو إذا كانت فارغة ──
+  // ── RBAC: تحميل الصلاحيات تلقائياً ──────────────────────────────────
   useEffect(() => {
     if (!user || !user.role) return;
-    // المشرف لديه كل الصلاحيات تلقائياً — لا حاجة للجلب
     if (user.role === 'مشرف' || user.role.toLowerCase() === 'admin') return;
-    // إذا الصلاحيات فارغة أو غير موجودة، اجلبها
     if (!user.permissions || user.permissions.length === 0) {
       fetch(apiUrl(`/api/permissions/my?role=${encodeURIComponent(user.role)}`))
         .then(res => res.json())
@@ -78,8 +143,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .catch(() => {});
     }
   }, [user?.id, user?.role]);
-  // ─────────────────────────────────────────────────────────────────────────
 
+  // ── Login ─────────────────────────────────────────────────────────────
   const login = async (username: string, password: string) => {
     try {
       const response = await fetch(apiUrl('/api/login'), {
@@ -91,14 +156,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data = await response.json();
 
       if (response.ok && data.status === 'success') {
-        // ✅ السر هنا: نأخذ الرتبة الحقيقية من الداتا بيس ونضعها في role
-        // لكي تعمل الحسبة في ملفاتك (user.role === 'مشرف') بشكل صحيح
         const dbRole = data.user.role?.toString().trim();
 
         const loggedInUser: User = {
-          id: data.user.universityId,
-          name: data.user.name,
-          role: dbRole, // ستكون قيمتها "مهندس" أو "مشرف" أو "admin"
+          id:                 data.user.universityId,
+          name:               data.user.name,
+          role:               dbRole,
+          session_token:      data.user.session_token || undefined,
           can_view_locations: data.user.can_view_locations !== false,
           can_borrow:         data.user.can_borrow !== false,
           auto_approve:       data.user.auto_approve === true,
@@ -107,24 +171,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         setUser(loggedInUser);
         localStorage.setItem('lab_user', JSON.stringify(loggedInUser));
+        // امسح أي سبب تسجيل خروج سابق
+        localStorage.removeItem('logout_reason');
         return { success: true };
       } else {
-        return { success: false, error: data.message || 'بيانات الدخول غير صحيحة', blocked: !!data.blocked };
+        return {
+          success: false,
+          error:   data.message || 'بيانات الدخول غير صحيحة',
+          blocked: !!data.blocked,
+        };
       }
-    } catch (error) {
+    } catch {
       return { success: false, error: 'تعذر الاتصال بالخادم. تأكد من تشغيل (Python API).' };
     }
   };
 
-  // ── RBAC: فحص الصلاحيات ───────────────────────────────────────────────
+  // ── RBAC: فحص الصلاحيات ──────────────────────────────────────────────
   const hasPermission = (perm: string): boolean => {
     if (!user) return false;
-    // المشرف لديه كل الصلاحيات
     if (user.role === 'مشرف' || user.role?.toLowerCase() === 'admin') return true;
     return user.permissions?.includes(perm) ?? false;
   };
 
-  // ── RBAC: تحديث الصلاحيات من السيرفر ────────────────────────────────────
+  // ── RBAC: تحديث الصلاحيات من السيرفر ────────────────────────────────
   const refreshPermissions = async () => {
     if (!user) return;
     try {
@@ -138,12 +207,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
     } catch { /* silent */ }
-  };
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('lab_user');
   };
 
   return (

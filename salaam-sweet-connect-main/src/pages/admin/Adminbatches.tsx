@@ -664,12 +664,12 @@ const AdminBatches = () => {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1 flex-wrap mb-0.5">
                                   <p className="font-bold text-sm text-slate-800 dark:text-slate-200 break-words leading-tight">{s.name}</p>
-                                  {s.isBanned && <span className="text-[9px] font-black bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded-md">{t('محظور', 'Banned')}</span>}
+                                  {s.isBanned && <span className="text-[10px] font-black bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded-md">{t('محظور', 'Banned')}</span>}
                                 </div>
                                 <p className="text-[10px] font-mono text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded w-fit mb-1">{s.universityId}</p>
                                 <div className="flex gap-1.5 flex-wrap">
-                                  {(s.active_loans ?? 0) > 0 && <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">{s.active_loans} {t('عهدة', 'loans')}</span>}
-                                  {(s.overdue_loans ?? 0) > 0 && <span className="text-[9px] font-bold text-red-500">⚠ {s.overdue_loans} {t('متأخر', 'overdue')}</span>}
+                                  {(s.active_loans ?? 0) > 0 && <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">{s.active_loans} {t('عهدة', 'loans')}</span>}
+                                  {(s.overdue_loans ?? 0) > 0 && <span className="text-[10px] font-bold text-red-500">⚠ {s.overdue_loans} {t('متأخر', 'overdue')}</span>}
                                 </div>
                               </div>
 

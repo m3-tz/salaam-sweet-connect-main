@@ -678,7 +678,7 @@ const AdminInventory = () => {
     if (loading) return <div className="text-center py-20 font-bold dark:text-slate-300">{t('جاري التحميل...', 'Loading...')}</div>;
     if (data.length === 0) return <div className="text-center py-24 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 shadow-sm transition-colors"><Package className="w-16 h-16 mx-auto text-slate-300 dark:text-slate-600 mb-4" /><p className="text-xl font-black text-slate-600 dark:text-slate-300">{t('لا توجد قطع', 'No items found')}</p></div>;
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6 animate-in fade-in duration-500">
         {data.map((c, index) => {
           const isOutOfStock = c.quantity === 0;
           return (
@@ -791,7 +791,7 @@ const AdminInventory = () => {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className={`font-bold text-sm truncate ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-slate-800 dark:text-slate-200'}`}>{node.name}</span>
-              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full border flex-shrink-0 ${typeColor}`}>{node.type}</span>
+              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full border flex-shrink-0 ${typeColor}`}>{node.type}</span>
             </div>
             {node.parent_id && depth === 0 && (
               <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">{getFullLocationPath(node.id)}</p>
@@ -802,7 +802,7 @@ const AdminInventory = () => {
                 <div className="flex-1 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full ${fillColor}`} style={{width: `${fillPct}%`}}/>
                 </div>
-                <span className={`text-[9px] font-bold flex-shrink-0 ${fillPct > 90 ? 'text-red-500' : fillPct > 60 ? 'text-orange-500' : 'text-slate-400'}`}>{fillPct}%</span>
+                <span className={`text-[10px] font-bold flex-shrink-0 ${fillPct > 90 ? 'text-red-500' : fillPct > 60 ? 'text-orange-500' : 'text-slate-400'}`}>{fillPct}%</span>
               </div>
             )}
           </div>
@@ -999,7 +999,7 @@ const AdminInventory = () => {
 
           {/* ✅ Skeleton Loading */}
           {loading ? (
-            <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-2"}>
+            <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6" : "space-y-2"}>
               {[...Array(8)].map((_, i) => (
                 viewMode === 'grid' ? (
                   <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-pulse">
@@ -1025,7 +1025,7 @@ const AdminInventory = () => {
         </TabsContent>
 
         <TabsContent value="locations-map" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
             <Card className="lg:col-span-1 rounded-2xl border-slate-200 dark:border-slate-800 dark:bg-slate-900 shadow-sm h-[700px] flex flex-col overflow-hidden transition-colors"
                   onDragOver={(e) => { e.preventDefault(); setDragOverId(0); }} onDragLeave={() => setDragOverId(null)} onDrop={(e) => handleDropLocation(e, null)}>
               <div className={`p-4 border-b border-slate-100 dark:border-slate-800 transition-colors ${dragOverId === 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-slate-50 dark:bg-slate-950'}`}>

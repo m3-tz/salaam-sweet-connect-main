@@ -881,8 +881,8 @@ const AdminStudents = () => {
           BULK ACTION BAR (floating)
       ═══════════════════════════════════════════════════════ */}
       {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-200">
-          <div className="bg-slate-900 dark:bg-slate-950 text-white rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-600 px-5 py-3 flex items-center gap-4 min-w-[340px]">
+        <div className="fixed bottom-4 left-2 right-2 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-200">
+          <div className="bg-slate-900 dark:bg-slate-950 text-white rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-600 px-4 py-3 flex flex-wrap items-center gap-3 w-full sm:min-w-[340px] sm:w-auto">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-sm font-black">{selected.size}</div>
               <span className="text-sm font-bold text-slate-200">{t(`مستخدم محدد`, `selected`)}</span>

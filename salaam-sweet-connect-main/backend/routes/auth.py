@@ -1,5 +1,6 @@
 import random
 import string as _string
+import uuid
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, jsonify, request
@@ -7,6 +8,7 @@ from flask import Blueprint, jsonify, request
 from database import get_db_connection
 from utils.helpers import hash_password, verify_password, sanitize_text, get_admin_info
 from utils.audit import log_action
+from utils.limiter import limiter
 from utils.security import (get_client_ip, is_blocked, record_failed_attempt,
                              reset_attempts, get_attempt_count as _get_attempt_count,
                              MAX_ATTEMPTS)
@@ -28,6 +30,7 @@ _otp_store: dict = {}
 # ──────────────────────────────────────────────
 
 @auth_bp.route('/api/login', methods=['POST'])
+@limiter.limit('10 per minute; 50 per hour')
 def login():
     try:
         client_ip = get_client_ip()
@@ -84,6 +87,27 @@ def login():
             user['can_borrow']         = bool(user.get('can_borrow', 1))
             user['auto_approve']       = bool(user.get('auto_approve', 0))
 
+            # ── Session Token: يُولَّد token جديد يُبطل الجلسة القديمة ──
+            session_token = str(uuid.uuid4())
+            try:
+                cur_st = conn.cursor()
+                # auto-migrate العمود إن لم يكن موجوداً
+                cur_st.execute(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                    "session_token VARCHAR(64) NULL DEFAULT NULL"
+                )
+                conn.commit()
+                cur_st.execute(
+                    "UPDATE users SET session_token = %s WHERE universityId = %s",
+                    (session_token, user['universityId']),
+                )
+                conn.commit()
+                cur_st.close()
+            except Exception as e:
+                print(f'[login] session_token error: {e!r}')
+                session_token = None
+            user['session_token'] = session_token
+
             # ── RBAC: جلب صلاحيات المستخدم حسب رتبته ──────────────
             user_permissions = []
             try:
@@ -130,7 +154,7 @@ def login():
         remaining_attempts = MAX_ATTEMPTS - _get_attempt_count(client_ip)
         return jsonify({
             'status':             'error',
-            'message':            f'بيانات الدخول غير صحيحة. تبقى {remaining_attempts} محاولة قبل الحجب الدائم.',
+            'message':            f'بيانات الدخول غير صحيحة.',
             'remaining_attempts': remaining_attempts,
         }), 401
     except Exception as exc:

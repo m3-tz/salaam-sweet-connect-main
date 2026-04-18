@@ -291,7 +291,7 @@ const AdminPermissions = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-6">
         {/* قائمة الرتب */}
         <div className="lg:col-span-1">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">

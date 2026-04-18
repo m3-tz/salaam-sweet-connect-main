@@ -23,6 +23,16 @@ const LoginPage = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [logoutReason, setLogoutReason] = useState<'session_expired' | 'inactivity' | null>(null);
+
+  // اقرأ سبب تسجيل الخروج القسري إن وُجد
+  useEffect(() => {
+    const reason = localStorage.getItem('logout_reason') as 'session_expired' | 'inactivity' | null;
+    if (reason) {
+      setLogoutReason(reason);
+      localStorage.removeItem('logout_reason');
+    }
+  }, []);
 
   // ===== Login =====
   const [loginId, setLoginId] = useState('');
@@ -139,7 +149,8 @@ const LoginPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-12 relative overflow-hidden transition-colors">
+      <div className="flex-1 flex flex-col relative overflow-hidden transition-colors">
+        <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-12">
         <div className="absolute top-6 right-6 z-20 flex items-center gap-2">
           <button onClick={toggleTheme} className="p-2.5 rounded-full bg-slate-200/50 hover:bg-slate-300/80 dark:bg-slate-800 dark:hover:bg-slate-700 backdrop-blur-sm transition-colors shadow-sm">
             {theme === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-600" />}
@@ -149,7 +160,7 @@ const LoginPage = () => {
           </Button>
         </div>
 
-        <div className="w-full max-w-[440px] bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-800 p-8 relative z-10 transition-colors">
+        <div className="w-full max-w-[440px] bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-800 p-4 sm:p-8 relative z-10 transition-colors">
           <div className="lg:hidden flex flex-col items-center mb-8">
             <div className="w-20 h-20 bg-blue-50 dark:bg-slate-800 rounded-2xl p-3 mb-4 shadow-sm border border-blue-100 dark:border-slate-700">
               <img src={ACADEMY_LOGO_URL} alt="Tuwaiq Logo" className="w-full h-full object-contain" />
@@ -187,6 +198,36 @@ const LoginPage = () => {
                     <Input type="password" placeholder="••••••••" className={`h-12 bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 dark:text-white focus-visible:ring-blue-500 font-medium tracking-widest ${lang === 'ar' ? 'pr-12' : 'pl-12'} text-left`} dir="ltr" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
                   </div>
                 </div>
+                {/* بانر سبب تسجيل الخروج القسري */}
+                {logoutReason && (
+                  <div className={`flex items-start gap-3 p-4 rounded-xl border ${
+                    logoutReason === 'session_expired'
+                      ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+                      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                  }`}>
+                    <ShieldOff className={`w-5 h-5 shrink-0 mt-0.5 ${
+                      logoutReason === 'session_expired' ? 'text-orange-600 dark:text-orange-400' : 'text-blue-600 dark:text-blue-400'
+                    }`} />
+                    <div>
+                      <p className={`text-sm font-black ${
+                        logoutReason === 'session_expired' ? 'text-orange-700 dark:text-orange-400' : 'text-blue-700 dark:text-blue-400'
+                      }`}>
+                        {logoutReason === 'session_expired'
+                          ? t('تم تسجيل خروجك', 'You were signed out')
+                          : t('انتهت جلستك', 'Session expired')}
+                      </p>
+                      <p className={`text-xs mt-0.5 font-medium ${
+                        logoutReason === 'session_expired' ? 'text-orange-600 dark:text-orange-500' : 'text-blue-600 dark:text-blue-500'
+                      }`}>
+                        {logoutReason === 'session_expired'
+                          ? t('تم تسجيل دخول بنفس حسابك من جهاز آخر.', 'Your account was signed in from another device.')
+                          : t('تم تسجيل خروجك بسبب عدم النشاط لمدة 20 دقيقة.', 'You were signed out due to 20 minutes of inactivity.')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* بانر الحجب */}
                 {isBlocked && (
                   <div className="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
                     <ShieldOff className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
@@ -356,6 +397,10 @@ const LoginPage = () => {
             </TabsContent>
           </Tabs>
         </div>
+        </div>{/* end flex-1 center area */}
+
+        {/* Developer Footer — داخل الـ right panel حتى لا تكسر الـ flex layout */}
+        <DeveloperFooter variant="compact" />
       </div>
 
       {showForgot && (
@@ -452,8 +497,6 @@ const LoginPage = () => {
         </div>
       )}
 
-      {/* Developer Footer */}
-      <DeveloperFooter variant="compact" />
     </div>
   );
 };

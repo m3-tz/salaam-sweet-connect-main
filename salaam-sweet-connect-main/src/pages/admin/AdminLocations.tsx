@@ -302,7 +302,7 @@ const map = new globalThis.Map<number, string>();    flatLocations.forEach(loc =
           {(['Box', 'Bin', 'Drawer', 'Shelf'].includes(node.type)) && (
             <div className="mt-2 flex items-center gap-2 pl-10 pr-2 opacity-80">
                 <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all ${fillPercentage > 90 ? 'bg-red-500' : fillPercentage > 60 ? 'bg-orange-500' : 'bg-emerald-500'}`} style={{width: `${fillPercentage}%`}}></div></div>
-                <span className="text-[9px] font-bold text-slate-400">{stats.totalQty}/{node.max_capacity}</span>
+                <span className="text-[10px] font-bold text-slate-400">{stats.totalQty}/{node.max_capacity}</span>
             </div>
           )}
         </div>
@@ -359,7 +359,7 @@ const map = new globalThis.Map<number, string>();    flatLocations.forEach(loc =
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-6">
         <Card className="lg:col-span-1 rounded-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm h-[650px] flex flex-col overflow-hidden transition-colors"
               onDragOver={(e) => { e.preventDefault(); setDragOverId(0); }} onDragLeave={() => setDragOverId(null)} onDrop={(e) => handleDrop(e, null)}>
           <div className={`p-4 border-b border-slate-100 dark:border-slate-800 transition-colors ${dragOverId === 0 ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-slate-50 dark:bg-slate-950'}`}>
