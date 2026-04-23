@@ -390,9 +390,8 @@ const AdminRequests = () => {
   };
 
   const handlePrintCartRequest = (req: CartRequest) => {
-    const decs: Record<string, ItemDecision> = {};
-    req.items.forEach(i => { decs[i.componentName] = { approved: true, approvedQty: i.requestedQuantity }; });
-    generateLoanPDF(req, decs, '', lang === 'ar');
+    // Use the unified backend PDF (matches the exact doc student receives by email).
+    window.open(apiUrl(`/api/pdf/cart-loan/${req.id}`), '_blank');
   };
 
   const filterBySearch = (item: { name?: string; studentName?: string; universityId?: string; studentId?: string }) => {

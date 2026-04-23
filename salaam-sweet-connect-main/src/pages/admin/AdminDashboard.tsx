@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   LayoutDashboard, Package, ClipboardList, Users, Tent,
   LogOut, Menu, AlertTriangle, Archive, Clock, ShoppingBag, KeyRound, Languages, BarChart3, RotateCcw,
-  Activity, Sun, Moon, Map, RefreshCw, BookOpen, Bell, Wrench, X, ChevronRight, Shield, Sparkles
+  Activity, Sun, Moon, Map, RefreshCw, BookOpen, Bell, Wrench, X, ChevronRight, Shield, Sparkles, Box as BoxIcon, Mail
 } from 'lucide-react';
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
@@ -28,10 +28,11 @@ import AdminBatches from './Adminbatches';
 import AdminLocations from './AdminLocations';
 import AdminPermissions from './AdminPermissions';
 import AdminItemRequests from './AdminItemRequests';
+import AdminBoxes from './AdminBoxes';
 import DeveloperFooter from '@/components/DeveloperFooter';
 
 const ACADEMY_LOGO_URL = "https://tuwaiq.edu.sa/img/logo-v2/logo.webp";
-type Tab = 'dashboard' | 'inventory' | 'locations' | 'loans' | 'students' | 'camps' | 'requests' | 'audit' | 'batches' | 'permissions' | 'item-requests';
+type Tab = 'dashboard' | 'inventory' | 'locations' | 'loans' | 'students' | 'camps' | 'requests' | 'audit' | 'batches' | 'permissions' | 'item-requests' | 'boxes';
 
 export interface RecentActivity {
   id: number;
@@ -125,6 +126,7 @@ const AdminDashboard = () => {
     { id: 'inventory' as Tab, label: t('المخزون', 'Inventory'), icon: Package, perm: 'inventory:view' },
     { id: 'locations' as Tab, label: t('خريطة المعمل', 'Lab Map'), icon: Map, perm: 'locations:view' },
     { id: 'loans' as Tab, label: t('العهد', 'Loans'), icon: ClipboardList, perm: 'loans:view' },
+    { id: 'boxes' as Tab, label: t('البوكسات', 'Boxes'), icon: BoxIcon, perm: 'loans:view' },
     { id: 'requests' as Tab, label: t('الطلبات', 'Requests'), icon: ShoppingBag, perm: 'requests:view' },
     { id: 'item-requests' as Tab, label: t('طلبات قطع جديدة', 'Item Requests'), icon: Sparkles, perm: 'requests:view' },
     ...(hasPermission('camps:view') ? [
@@ -269,6 +271,7 @@ const AdminDashboard = () => {
       case 'batches': return <AdminBatches />;
       case 'permissions': return <AdminPermissions />;
       case 'item-requests': return <AdminItemRequests />;
+      case 'boxes': return <AdminBoxes />;
       default: return (
         <DashboardHome
           {...stats}
@@ -458,15 +461,34 @@ const AdminDashboard = () => {
                     </div>
 
                     {/* Footer */}
-                    {notifications.length > 0 && (
-                      <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                    <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 space-y-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(apiUrl('/api/admin/send-daily-digest'), {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', 'admin-id': user?.id || '', 'admin-name': user?.name || '' },
+                              body: JSON.stringify({ target: 'self' }),
+                            });
+                            const data = await res.json();
+                            toast({ title: res.ok ? (data.message || t('تم الإرسال', 'Sent')) : (data.message || t('فشل الإرسال', 'Failed')), variant: res.ok ? 'default' : 'destructive' });
+                          } catch {
+                            toast({ title: t('خطأ في الاتصال', 'Connection error'), variant: 'destructive' });
+                          }
+                          setNotifOpen(false);
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20">
+                        <Mail className="w-3 h-3"/>
+                        {t('أرسل الملخص اليومي الآن', 'Send daily digest now')}
+                      </button>
+                      {notifications.length > 0 && (
                         <button onClick={() => { fetchStats(); setNotifOpen(false); }}
                           className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                           <RefreshCw className="w-3 h-3"/>
                           {t('تحديث التنبيهات', 'Refresh notifications')}
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </>
               )}

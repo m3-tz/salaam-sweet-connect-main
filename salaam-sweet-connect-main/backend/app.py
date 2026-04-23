@@ -13,7 +13,10 @@ from routes.batches       import batches_bp
 from routes.admin         import admin_bp
 from routes.permissions   import permissions_bp
 from routes.item_requests import item_requests_bp
+from routes.boxes         import boxes_bp
+from routes.pdfs          import pdfs_bp
 from utils.limiter        import limiter
+from utils.scheduler      import start_scheduler
 
 # الـ origins المسموح بها — عدّلها لتطابق نطاقك الفعلي في الإنتاج
 _ALLOWED_ORIGINS = os.environ.get(
@@ -95,12 +98,19 @@ def create_app() -> Flask:
     # ── Register blueprints ───────────────────────────────────────────────
     for bp in (auth_bp, users_bp, items_bp, loans_bp, camps_bp,
                requests_bp, locations_bp, batches_bp, admin_bp,
-               permissions_bp, item_requests_bp):
+               permissions_bp, item_requests_bp, boxes_bp, pdfs_bp):
         app.register_blueprint(bp)
 
     @app.route('/')
     def home():
         return 'Innovation Lab Backend is Running'
+
+    # ── Background jobs (daily digest, auto-suspend) ─────────────────────
+    if os.environ.get('ENABLE_SCHEDULER', '1') == '1':
+        try:
+            start_scheduler(app)
+        except Exception as e:
+            print(f'[app] scheduler disabled: {e}')
 
     return app
 

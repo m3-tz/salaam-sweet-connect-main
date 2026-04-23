@@ -9,14 +9,23 @@
   4. تذكير العهد المتأخرة
   5. إيميل مخصص من المشرف
 
-Public API (unchanged — all routes continue to work):
+Public API:
   from email_service import (
       send_registration_confirmation,
       send_otp_email,
       generate_otp,
       send_request_decision,
       send_overdue_reminder,
+      send_loan_receipt,
+      send_item_request_status,
       send_custom_email,
+      send_account_approved,
+      send_return_confirmation,
+      send_box_loan_receipt,
+      send_box_return_confirmation,
+      send_registration_rejected,
+      send_password_changed,
+      send_admin_digest,
   )
 """
 
@@ -26,6 +35,7 @@ import smtplib
 import string
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -110,9 +120,10 @@ def _build_html(title: str, body_html: str) -> str:
 # 📤 Core sender
 # ──────────────────────────────────────────────
 
-def _send_email(to_email: str, subject: str, html_content: str) -> dict:
+def _send_email(to_email: str, subject: str, html_content: str, attachments: list | None = None) -> dict:
     """
     Send an email via Gmail SMTP (TLS).
+    `attachments` is an optional list of dicts: {"filename": "x.pdf", "content": bytes, "mime": "application/pdf"}.
     Returns {"success": True} or {"success": False, "error": "..."}.
     """
     if not _PASSWORD:
@@ -121,11 +132,22 @@ def _send_email(to_email: str, subject: str, html_content: str) -> dict:
         return {"success": False, "error": msg}
 
     try:
-        msg = MIMEMultipart("alternative")
+        if attachments:
+            msg = MIMEMultipart("mixed")
+            alt = MIMEMultipart("alternative")
+            alt.attach(MIMEText(html_content, "html", "utf-8"))
+            msg.attach(alt)
+            for att in attachments:
+                mime_main, _, mime_sub = (att.get("mime") or "application/octet-stream").partition("/")
+                part = MIMEApplication(att["content"], _subtype=(mime_sub or "octet-stream"))
+                part.add_header("Content-Disposition", "attachment", filename=att["filename"])
+                msg.attach(part)
+        else:
+            msg = MIMEMultipart("alternative")
+            msg.attach(MIMEText(html_content, "html", "utf-8"))
         msg["Subject"] = subject
         msg["From"]    = f"{_SENDER_NAME} <{_SENDER}>"
         msg["To"]      = to_email
-        msg.attach(MIMEText(html_content, "html", "utf-8"))
 
         with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as server:
             server.ehlo()
@@ -411,6 +433,7 @@ def send_loan_receipt(
     admin_name: str = '',
     admin_comment: str = '',
     status: str = 'approved',     # 'approved' | 'partial'
+    attachments: list | None = None,
 ) -> dict:
     """
     Send a professional loan receipt / سند عهدة to the student after approval.
@@ -566,6 +589,7 @@ def send_loan_receipt(
         to_email,
         subject_map.get(status, f"📄 سند العهدة #{req_id}"),
         _build_html(f"سند العهدة #{req_id}", body),
+        attachments=attachments,
     )
 
 
@@ -657,15 +681,527 @@ def send_item_request_status(
     return _send_email(to_email, subject, _build_html(subject, body))
 
 
-def send_custom_email(to_email: str, subject: str, body_text: str) -> dict:
+def send_custom_email(to_email: str, subject: str, body_text: str, recipient_name: str = '') -> dict:
     """Send a freeform admin email to any user."""
+    greeting = f'<h2 style="color:#1a1a2e;margin:0 0 14px;font-size:20px;">مرحباً {recipient_name}،</h2>' if recipient_name else ''
     body_html = f"""
-    <div style="font-size:15px;color:#1e293b;line-height:1.8;white-space:pre-wrap;">
-        {body_text}
-    </div>
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e2e8f0;">
-        <p style="color:#94a3b8;font-size:12px;margin:0;">
-            تم إرسال هذه الرسالة من إدارة معمل أكاديمية طويق
+    {greeting}
+    <div style="font-size:14px;color:#1e293b;line-height:1.8;white-space:pre-wrap;
+                background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
+                padding:18px 22px;">{body_text}</div>
+    <div style="margin-top:22px;padding-top:14px;border-top:1px solid #e2e8f0;">
+        <p style="color:#64748b;font-size:12px;margin:0;line-height:1.7;">
+            مع التحية،<br>
+            <strong style="color:#1a1a2e;">إدارة معمل أكاديمية طويق</strong>
         </p>
     </div>"""
     return _send_email(to_email, subject, _build_html(subject, body_html))
+
+
+# ──────────────────────────────────────────────
+# ✅ 8. Account approved / activated
+# ──────────────────────────────────────────────
+
+def send_account_approved(
+    to_email: str,
+    student_name: str,
+    academic_id: str,
+    batch_name: str = '',
+    role_label: str = 'طالب',
+    attachments: list | None = None,
+) -> dict:
+    """
+    Notify the user that their registration was approved and their
+    account is now active — includes the academic / university ID
+    they will use to sign in.
+    """
+    batch_block = f"""
+    <tr>
+        <td style="padding:10px 0;color:#64748b;font-size:13px;width:140px;">الدفعة:</td>
+        <td style="padding:10px 0;color:#0f172a;font-size:14px;font-weight:600;">{batch_name}</td>
+    </tr>""" if batch_name else ""
+
+    body = f"""
+    <h2 style="color:#15803d;margin:0 0 6px;font-size:22px;font-weight:700;">
+        مرحباً بك في أكاديمية طويق، {student_name}
+    </h2>
+    <p style="color:#64748b;margin:0 0 22px;font-size:14px;line-height:1.7;">
+        يسعدنا إبلاغك بأنه قد تمت الموافقة على طلب تسجيلك، وأصبح حسابك جاهزاً للاستخدام.
+    </p>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;
+                padding:22px 24px;margin-bottom:22px;">
+        <p style="color:#166534;margin:0 0 16px;font-size:13px;font-weight:700;
+                  text-transform:uppercase;letter-spacing:.06em;">
+            تفاصيل الحساب
+        </p>
+        <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="padding:10px 0;color:#64748b;font-size:13px;width:140px;">الاسم:</td>
+                <td style="padding:10px 0;color:#0f172a;font-size:14px;font-weight:600;">{student_name}</td>
+            </tr>
+            <tr>
+                <td style="padding:10px 0;color:#64748b;font-size:13px;">الصفة:</td>
+                <td style="padding:10px 0;color:#0f172a;font-size:14px;font-weight:600;">{role_label}</td>
+            </tr>
+            {batch_block}
+            <tr>
+                <td style="padding:10px 0;color:#64748b;font-size:13px;">الرقم الأكاديمي:</td>
+                <td style="padding:10px 0;">
+                    <span style="display:inline-block;background:#1a1a2e;color:#fff;
+                                 padding:6px 16px;border-radius:8px;font-size:15px;
+                                 font-weight:700;letter-spacing:2px;font-family:monospace;">
+                        {academic_id}
+                    </span>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+                padding:16px 20px;margin-bottom:18px;">
+        <p style="color:#1e40af;margin:0 0 6px;font-size:13px;font-weight:700;">
+            تسجيل الدخول
+        </p>
+        <p style="color:#1e3a8a;margin:0;font-size:13px;line-height:1.7;">
+            استخدم <strong>الرقم الأكاديمي</strong> أعلاه مع كلمة المرور التي أنشأتها عند التسجيل للدخول إلى النظام.
+        </p>
+    </div>
+
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;
+                padding:14px 18px;">
+        <p style="color:#9a3412;margin:0;font-size:12.5px;line-height:1.7;">
+            للحفاظ على أمان حسابك، يُنصح بعدم مشاركة رقمك الأكاديمي أو كلمة المرور مع أي شخص آخر.
+        </p>
+    </div>"""
+
+    return _send_email(
+        to_email,
+        f"تم تفعيل حسابك في نظام المعمل — رقمك الأكاديمي {academic_id}",
+        _build_html("تفعيل الحساب", body),
+        attachments=attachments,
+    )
+
+
+# ──────────────────────────────────────────────
+# ♻️ 9. Loan return confirmation
+# ──────────────────────────────────────────────
+
+def send_return_confirmation(
+    to_email: str,
+    student_name: str,
+    item_name: str,
+    quantity: int,
+    condition: str = 'good',
+    admin_name: str = '',
+    attachments: list | None = None,
+) -> dict:
+    """Confirm that a borrowed item has been returned."""
+    if condition == 'damaged':
+        banner = """
+        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;
+                    padding:16px 20px;margin-bottom:18px;">
+            <p style="color:#92400e;margin:0;font-size:14px;font-weight:600;">
+                تم استلام القطعة وتحويلها إلى قسم الصيانة لفحص الحالة.
+            </p>
+        </div>"""
+        subject_suffix = '— تم الاستلام للصيانة'
+    else:
+        banner = """
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+                    padding:16px 20px;margin-bottom:18px;">
+            <p style="color:#15803d;margin:0;font-size:14px;font-weight:600;">
+                تم استلام القطعة بحالة سليمة وإعادتها إلى المخزون.
+            </p>
+        </div>"""
+        subject_suffix = '— تم الإرجاع بنجاح'
+
+    admin_row = f"""
+    <tr>
+        <td style="padding:10px 0;color:#64748b;font-size:13px;">تم الاستلام من قِبَل:</td>
+        <td style="padding:10px 0;color:#0f172a;font-size:13px;font-weight:600;">{admin_name}</td>
+    </tr>""" if admin_name else ""
+
+    body = f"""
+    <h2 style="color:#1a1a2e;margin:0 0 6px;font-size:20px;">مرحباً {student_name}،</h2>
+    <p style="color:#64748b;margin:0 0 20px;font-size:14px;line-height:1.7;">
+        نؤكد لك أنه قد تم استلام القطعة المستعارة بتاريخ
+        <strong>{datetime.now().strftime('%Y-%m-%d')}</strong>.
+    </p>
+    {banner}
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:4px 20px;">
+        <tr>
+            <td style="padding:10px 0;color:#64748b;font-size:13px;width:160px;">اسم القطعة:</td>
+            <td style="padding:10px 0;color:#0f172a;font-size:14px;font-weight:700;">{item_name}</td>
+        </tr>
+        <tr>
+            <td style="padding:10px 0;color:#64748b;font-size:13px;">الكمية:</td>
+            <td style="padding:10px 0;color:#0f172a;font-size:14px;font-weight:600;">{quantity}</td>
+        </tr>
+        {admin_row}
+    </table>
+    <p style="color:#64748b;font-size:12.5px;line-height:1.7;margin:20px 0 0;">
+        شكراً لالتزامك بإرجاع العهدة في وقتها. يسعدنا خدمتك في أي وقت.
+    </p>"""
+
+    return _send_email(
+        to_email,
+        f"تأكيد إرجاع قطعة: {item_name} {subject_suffix}",
+        _build_html("تأكيد الإرجاع", body),
+        attachments=attachments,
+    )
+
+
+# ──────────────────────────────────────────────
+# 📦 10. Box loan receipt
+# ──────────────────────────────────────────────
+
+def send_box_loan_receipt(
+    to_email: str,
+    student_name: str,
+    student_id: str,
+    box_name: str,
+    instance_code: str,
+    expected_return_date: str,
+    admin_name: str = '',
+    attachments: list | None = None,
+) -> dict:
+    """Confirm that a box/kit has been checked out to the student."""
+    today = datetime.now().strftime('%Y-%m-%d %H:%M')
+    admin_row = f"""
+    <tr>
+        <td style="padding:8px 0;color:#64748b;font-size:13px;">المشرف المُسلِّم:</td>
+        <td style="padding:8px 0;color:#0f172a;font-size:13px;font-weight:600;">{admin_name}</td>
+    </tr>""" if admin_name else ""
+
+    body = f"""
+    <h2 style="color:#1a1a2e;margin:0 0 6px;font-size:20px;">مرحباً {student_name}،</h2>
+    <p style="color:#64748b;margin:0 0 20px;font-size:14px;line-height:1.7;">
+        نؤكد لك أنه قد تم تسليمك الصندوق التالي كعهدة مؤقتة، ويُرجى الحفاظ عليه وإعادته في الموعد المحدد.
+    </p>
+
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;
+                padding:20px 24px;margin-bottom:18px;">
+        <p style="color:#1e40af;margin:0 0 14px;font-size:13px;font-weight:700;
+                  text-transform:uppercase;letter-spacing:.06em;">تفاصيل العهدة</p>
+        <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="padding:8px 0;color:#64748b;font-size:13px;width:160px;">اسم الصندوق:</td>
+                <td style="padding:8px 0;color:#0f172a;font-size:14px;font-weight:700;">{box_name}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 0;color:#64748b;font-size:13px;">رمز النسخة:</td>
+                <td style="padding:8px 0;">
+                    <span style="background:#1a1a2e;color:#fff;padding:4px 12px;
+                                 border-radius:6px;font-family:monospace;font-size:13px;
+                                 letter-spacing:1px;">{instance_code}</span>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding:8px 0;color:#64748b;font-size:13px;">الرقم الأكاديمي:</td>
+                <td style="padding:8px 0;color:#0f172a;font-size:13px;font-weight:600;font-family:monospace;">{student_id}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 0;color:#64748b;font-size:13px;">تاريخ التسليم:</td>
+                <td style="padding:8px 0;color:#0f172a;font-size:13px;">{today}</td>
+            </tr>
+            {admin_row}
+        </table>
+    </div>
+
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;
+                padding:14px 20px;margin-bottom:16px;">
+        <p style="color:#9a3412;margin:0;font-size:13.5px;font-weight:700;">
+            تاريخ الإرجاع المتوقع: <strong style="color:#ea580c;">{expected_return_date}</strong>
+        </p>
+    </div>
+
+    <p style="color:#64748b;font-size:12.5px;line-height:1.7;margin:0;">
+        يُرجى الاحتفاظ بهذه الرسالة كمرجع، وإبراز رمز النسخة عند الإرجاع.
+        التأخر عن موعد الإرجاع قد يؤثر على صلاحيات الاستعارة المستقبلية.
+    </p>"""
+
+    return _send_email(
+        to_email,
+        f"تأكيد استلام صندوق: {box_name} ({instance_code})",
+        _build_html("سند عهدة صندوق", body),
+        attachments=attachments,
+    )
+
+
+# ──────────────────────────────────────────────
+# ♻️ 11. Box return confirmation
+# ──────────────────────────────────────────────
+
+def send_box_return_confirmation(
+    to_email: str,
+    student_name: str,
+    box_name: str,
+    instance_code: str,
+    condition: str = 'good',
+    admin_name: str = '',
+    notes: str = '',
+    attachments: list | None = None,
+) -> dict:
+    """Confirm that a box/kit has been returned."""
+    today = datetime.now().strftime('%Y-%m-%d %H:%M')
+    if condition == 'damaged':
+        banner_bg, banner_border, banner_text = '#fffbeb', '#fcd34d', '#92400e'
+        banner_msg = 'تم استلام الصندوق وتحويله إلى الصيانة للفحص.'
+    else:
+        banner_bg, banner_border, banner_text = '#f0fdf4', '#bbf7d0', '#15803d'
+        banner_msg = 'تم استلام الصندوق بحالة جيدة وإغلاق العهدة.'
+
+    notes_block = f"""
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
+                padding:14px 18px;margin-top:14px;">
+        <p style="color:#64748b;font-size:12px;font-weight:700;margin:0 0 6px;
+                  text-transform:uppercase;letter-spacing:.05em;">ملاحظات المشرف</p>
+        <p style="color:#334155;font-size:13px;margin:0;line-height:1.7;">{notes}</p>
+    </div>""" if notes else ""
+
+    admin_row = f"""
+    <tr>
+        <td style="padding:8px 0;color:#64748b;font-size:13px;">استلمه:</td>
+        <td style="padding:8px 0;color:#0f172a;font-size:13px;font-weight:600;">{admin_name}</td>
+    </tr>""" if admin_name else ""
+
+    body = f"""
+    <h2 style="color:#1a1a2e;margin:0 0 6px;font-size:20px;">مرحباً {student_name}،</h2>
+    <p style="color:#64748b;margin:0 0 18px;font-size:14px;line-height:1.7;">
+        تم تسجيل إرجاع الصندوق بنجاح في النظام.
+    </p>
+    <div style="background:{banner_bg};border:1px solid {banner_border};border-radius:10px;
+                padding:14px 20px;margin-bottom:18px;">
+        <p style="color:{banner_text};margin:0;font-size:14px;font-weight:600;">{banner_msg}</p>
+    </div>
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:4px 20px;">
+        <tr>
+            <td style="padding:8px 0;color:#64748b;font-size:13px;width:160px;">اسم الصندوق:</td>
+            <td style="padding:8px 0;color:#0f172a;font-size:14px;font-weight:700;">{box_name}</td>
+        </tr>
+        <tr>
+            <td style="padding:8px 0;color:#64748b;font-size:13px;">رمز النسخة:</td>
+            <td style="padding:8px 0;color:#0f172a;font-size:13px;font-family:monospace;">{instance_code}</td>
+        </tr>
+        <tr>
+            <td style="padding:8px 0;color:#64748b;font-size:13px;">تاريخ الإرجاع:</td>
+            <td style="padding:8px 0;color:#0f172a;font-size:13px;">{today}</td>
+        </tr>
+        {admin_row}
+    </table>
+    {notes_block}
+    <p style="color:#64748b;font-size:12.5px;line-height:1.7;margin:18px 0 0;">
+        شكراً لالتزامك. نتمنى لك التوفيق في مشاريعك القادمة.
+    </p>"""
+
+    return _send_email(
+        to_email,
+        f"تأكيد إرجاع صندوق: {box_name} ({instance_code})",
+        _build_html("تأكيد إرجاع الصندوق", body),
+        attachments=attachments,
+    )
+
+
+# ──────────────────────────────────────────────
+# ❌ 12. Registration rejected
+# ──────────────────────────────────────────────
+
+def send_registration_rejected(
+    to_email: str,
+    student_name: str,
+    reason: str = '',
+) -> dict:
+    """Notify the applicant that their registration was rejected."""
+    reason_block = f"""
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;
+                padding:14px 20px;margin:16px 0;">
+        <p style="color:#9a3412;font-size:12px;font-weight:700;margin:0 0 6px;
+                  text-transform:uppercase;letter-spacing:.05em;">سبب الرفض</p>
+        <p style="color:#7c2d12;font-size:13.5px;line-height:1.7;margin:0;">{reason}</p>
+    </div>""" if reason else ""
+
+    body = f"""
+    <h2 style="color:#1a1a2e;margin:0 0 6px;font-size:20px;">مرحباً {student_name}،</h2>
+    <p style="color:#64748b;margin:0 0 18px;font-size:14px;line-height:1.7;">
+        نشكر لك اهتمامك بالتسجيل في نظام معمل أكاديمية طويق. بعد مراجعة طلبك،
+        نأسف لإبلاغك بأنه تعذّر قبول الطلب في الوقت الحالي.
+    </p>
+    {reason_block}
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
+                padding:14px 20px;margin-top:16px;">
+        <p style="color:#334155;font-size:13px;line-height:1.7;margin:0;">
+            إذا كنت تعتقد أن هناك خطأً، يمكنك التواصل مع مشرف المعمل لمراجعة الطلب
+            أو إعادة تقديمه بعد تحديث بياناتك.
+        </p>
+    </div>
+    <p style="color:#94a3b8;font-size:12px;line-height:1.7;margin:20px 0 0;">
+        نتمنى لك التوفيق، ونسعد بتواصلك معنا مستقبلاً.
+    </p>"""
+
+    return _send_email(
+        to_email,
+        "نتيجة طلب التسجيل — لم تتم الموافقة",
+        _build_html("نتيجة طلب التسجيل", body),
+    )
+
+
+# ──────────────────────────────────────────────
+# 🔐 13. Password changed confirmation
+# ──────────────────────────────────────────────
+
+def send_password_changed(
+    to_email: str,
+    student_name: str,
+    method: str = 'otp',     # 'otp' | 'admin' | 'self'
+) -> dict:
+    """Security notice sent after a successful password change."""
+    method_map = {
+        'otp':   'إعادة تعيين عبر رمز التحقق (OTP)',
+        'admin': 'تحديث من قبل مشرف المعمل',
+        'self':  'تحديث من داخل الحساب',
+    }
+    method_label = method_map.get(method, method_map['otp'])
+    when_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+    body = f"""
+    <h2 style="color:#1a1a2e;margin:0 0 6px;font-size:20px;">مرحباً {student_name}،</h2>
+    <p style="color:#64748b;margin:0 0 18px;font-size:14px;line-height:1.7;">
+        نُعلمك بأنه قد تم تغيير كلمة المرور الخاصة بحسابك بنجاح.
+    </p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+                padding:16px 20px;margin-bottom:18px;">
+        <p style="color:#15803d;font-size:14px;font-weight:600;margin:0 0 10px;">
+            تم تحديث كلمة المرور
+        </p>
+        <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="padding:6px 0;color:#64748b;font-size:13px;width:130px;">التاريخ والوقت:</td>
+                <td style="padding:6px 0;color:#0f172a;font-size:13px;">{when_str}</td>
+            </tr>
+            <tr>
+                <td style="padding:6px 0;color:#64748b;font-size:13px;">طريقة التغيير:</td>
+                <td style="padding:6px 0;color:#0f172a;font-size:13px;">{method_label}</td>
+            </tr>
+        </table>
+    </div>
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;
+                padding:14px 20px;">
+        <p style="color:#991b1b;font-size:13px;font-weight:700;margin:0 0 6px;">
+            لم تقم بهذا الإجراء؟
+        </p>
+        <p style="color:#7f1d1d;font-size:13px;line-height:1.7;margin:0;">
+            تواصل مع مشرف المعمل فوراً لحماية حسابك واستعادة الدخول.
+        </p>
+    </div>"""
+
+    return _send_email(
+        to_email,
+        "تم تغيير كلمة المرور — إشعار أمان",
+        _build_html("تغيير كلمة المرور", body),
+    )
+
+
+# ──────────────────────────────────────────────
+# 📊 14. Admin daily digest
+# ──────────────────────────────────────────────
+
+def send_admin_digest(
+    to_email: str,
+    admin_name: str,
+    pending_registrations: int,
+    pending_cart_requests: int,
+    pending_item_requests: int,
+    overdue_loans: list,        # [{'student_name':..., 'item_name':..., 'days_overdue':...}, ...]
+    low_stock_items: list,      # [{'name':..., 'quantity':...}, ...]
+) -> dict:
+    """Daily summary for the lab admin."""
+    today_str = datetime.now().strftime('%Y-%m-%d')
+
+    def _stat_card(label, value, color):
+        return f"""
+        <td width="33%" style="padding:4px;" align="center">
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 10px;">
+            <p style="color:{color};font-size:26px;font-weight:800;margin:0;line-height:1;">{value}</p>
+            <p style="color:#64748b;font-size:11px;margin:6px 0 0;font-weight:600;">{label}</p>
+          </div>
+        </td>"""
+
+    overdue_rows = "".join(
+        f"""<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #fecaca;font-size:13px;color:#1e293b;">{o.get('student_name','—')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #fecaca;font-size:13px;color:#475569;">{o.get('item_name','—')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #fecaca;font-size:13px;color:#dc2626;text-align:center;font-weight:700;">{o.get('days_overdue','—')}</td>
+        </tr>"""
+        for o in overdue_loans[:10]
+    )
+    overdue_block = f"""
+    <p style="font-size:12px;font-weight:700;color:#991b1b;text-transform:uppercase;
+              letter-spacing:.05em;margin:22px 0 8px;">العهد المتأخرة</p>
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border:1px solid #fecaca;border-radius:10px;overflow:hidden;">
+      <thead><tr style="background:#fef2f2;">
+        <th style="padding:10px 12px;text-align:right;color:#991b1b;font-size:11px;font-weight:700;">الطالب</th>
+        <th style="padding:10px 12px;text-align:right;color:#991b1b;font-size:11px;font-weight:700;">القطعة</th>
+        <th style="padding:10px 12px;text-align:center;color:#991b1b;font-size:11px;font-weight:700;">أيام التأخير</th>
+      </tr></thead>
+      <tbody>{overdue_rows}</tbody>
+    </table>""" if overdue_loans else ""
+
+    low_stock_rows = "".join(
+        f"""<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #fde68a;font-size:13px;color:#1e293b;">{i.get('name','—')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #fde68a;font-size:13px;color:#b45309;text-align:center;font-weight:700;">{i.get('quantity','0')}</td>
+        </tr>"""
+        for i in low_stock_items[:10]
+    )
+    low_stock_block = f"""
+    <p style="font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;
+              letter-spacing:.05em;margin:22px 0 8px;">مخزون منخفض</p>
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border:1px solid #fde68a;border-radius:10px;overflow:hidden;">
+      <thead><tr style="background:#fffbeb;">
+        <th style="padding:10px 12px;text-align:right;color:#92400e;font-size:11px;font-weight:700;">القطعة</th>
+        <th style="padding:10px 12px;text-align:center;color:#92400e;font-size:11px;font-weight:700;">الكمية المتبقية</th>
+      </tr></thead>
+      <tbody>{low_stock_rows}</tbody>
+    </table>""" if low_stock_items else ""
+
+    nothing_block = "" if (pending_registrations + pending_cart_requests + pending_item_requests
+                           + len(overdue_loans) + len(low_stock_items)) > 0 else """
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+                padding:18px 22px;text-align:center;margin-top:16px;">
+        <p style="color:#15803d;font-size:14px;font-weight:700;margin:0;">
+            لا توجد بنود تستوجب المراجعة اليوم. كل شيء على ما يرام.
+        </p>
+    </div>"""
+
+    body = f"""
+    <h2 style="color:#1a1a2e;margin:0 0 6px;font-size:20px;">مرحباً {admin_name}،</h2>
+    <p style="color:#64748b;margin:0 0 20px;font-size:14px;line-height:1.7;">
+        هذا هو ملخص نشاط المعمل ليوم <strong>{today_str}</strong>.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
+      <tr>
+        {_stat_card('طلبات تسجيل', pending_registrations, '#1d4ed8')}
+        {_stat_card('طلبات استعارة', pending_cart_requests, '#ea580c')}
+        {_stat_card('طلبات قطع جديدة', pending_item_requests, '#7c3aed')}
+      </tr>
+    </table>
+
+    {overdue_block}
+    {low_stock_block}
+    {nothing_block}
+
+    <p style="color:#94a3b8;font-size:12px;line-height:1.7;margin:24px 0 0;">
+        يُرسَل هذا الملخص تلقائياً من نظام إدارة المعمل.
+    </p>"""
+
+    return _send_email(
+        to_email,
+        f"ملخص نشاط المعمل اليومي — {today_str}",
+        _build_html("الملخص اليومي", body),
+    )

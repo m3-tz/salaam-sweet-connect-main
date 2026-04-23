@@ -418,72 +418,21 @@ Please contact the lab admin for more details.`
 
   const openReturnModal = (loan: Loan) => { setSelectedLoanToReturn(loan); setReturnConditionOpen(true); };
 
-  // ✅ إرجاع متعدد دفعة وحدة
+  // ✅ إرجاع متعدد دفعة وحدة — يستخدم endpoint واحد يرسل إيميل واحد مع PDF مجمّع
   const handleBulkReturn = async (condition: 'good' | 'damaged') => {
     if (selectedLoanIds.length === 0 || !selectedStudentForManage) return;
     const loansToReturn = selectedStudentForManage.loans.filter(l => selectedLoanIds.includes(l.id));
     try {
-      await Promise.all(loansToReturn.map(loan =>
-        fetch(apiUrl(`/api/loans/return/${loan.id}`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'admin-id': user?.id || '', 'admin-name': encodeURIComponent(user?.name || '') },
-          body: JSON.stringify({ itemName: loan.componentName, quantity: loan.quantity, condition })
-        })
-      ));
-
-      // إيميل واحد فيه كل القطع
-      try {
-        const usersRes = await fetch(apiUrl('/api/users'));
-        if (usersRes.ok) {
-          const usersData = await usersRes.json();
-          const studentUser = usersData.data?.find((u: {universityId: string; email?: string; name: string}) => u.universityId === selectedStudentForManage.studentId);
-          if (studentUser?.email) {
-            const itemsList = loansToReturn.map(l => `• ${l.componentName} (x${l.quantity})`).join('\n');
-            const subject = condition === 'good'
-              ? t('تأكيد إرجاع القطع ✅', 'Items Return Confirmed ✅')
-              : t('تأكيد إرجاع القطع — تحويل للصيانة 🔧', 'Items Return — Sent to Maintenance 🔧');
-            const body = condition === 'good'
-              ? t(
-                  `مرحباً ${studentUser.name}،
-
-تم استلام القطع التالية وإعادتها للمخزون بنجاح:
-${itemsList}
-
-الحالة: سليمة ✅
-شكراً لالتزامك.`,
-                  `Hello ${studentUser.name},
-
-The following items have been returned to stock successfully:
-${itemsList}
-
-Condition: Good ✅
-Thank you for your commitment.`
-                )
-              : t(
-                  `مرحباً ${studentUser.name}،
-
-تم استلام القطع التالية وتحويلها لقسم الصيانة:
-${itemsList}
-
-الحالة: تحتاج صيانة 🔧
-يرجى التواصل مع مشرف المعمل لمزيد من التفاصيل.`,
-                  `Hello ${studentUser.name},
-
-The following items have been received and sent to maintenance:
-${itemsList}
-
-Condition: Needs Repair 🔧
-Please contact the lab admin for more details.`
-                );
-            await fetch(apiUrl('/api/admin/send-custom-email'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'admin-id': user?.id || '', 'admin-name': encodeURIComponent(user?.name || '') },
-              body: JSON.stringify({ to: studentUser.email, subject, body })
-            });
-          }
-        }
-      } catch { /* email failure is non-critical */ }
-
+      const res = await fetch(apiUrl('/api/loans/return-bulk'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'admin-id': user?.id || '', 'admin-name': encodeURIComponent(user?.name || '') },
+        body: JSON.stringify({
+          loans: loansToReturn.map(l => ({
+            id: l.id, itemName: l.componentName, quantity: l.quantity, condition,
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error('bulk return failed');
       toast({ title: t(`تم إرجاع ${loansToReturn.length} قطعة ✅`, `${loansToReturn.length} items returned ✅`) });
       setBulkReturnOpen(false);
       setSelectedLoanIds([]);
@@ -544,6 +493,10 @@ Please contact the lab admin for more details.`
   };
 
   const handleBulkPDF = (group: GroupedStudent) => {
+    // Unified backend PDF: student statement — matches the official branded template.
+    window.open(apiUrl(`/api/pdf/statement/${group.studentId}`), '_blank');
+    return;
+    // eslint-disable-next-line no-unreachable
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
     const isAr = lang === 'ar';

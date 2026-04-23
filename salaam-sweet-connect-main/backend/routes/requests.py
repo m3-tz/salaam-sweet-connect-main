@@ -7,7 +7,13 @@ from utils.helpers import sanitize_text, get_admin_info
 from utils.helpers import hash_password
 from utils.audit import log_action
 from utils.academic import generate_academic_id
-from email_service import send_request_decision, send_custom_email, send_loan_receipt
+from email_service import (
+    send_request_decision,
+    send_custom_email,
+    send_loan_receipt,
+    send_account_approved,
+    send_registration_rejected,
+)
 
 requests_bp = Blueprint('requests', __name__)
 
@@ -108,23 +114,54 @@ def handle_reg_request(req_id):
                      req_data['phone'], req_data.get('email'), batch_id_val),
                 )
 
-                if academic_id_val and req_data.get('email') and batch_row:
+                if req_data.get('email') and final_university_id:
                     try:
-                        send_custom_email(
-                            req_data['email'],
-                            f"رقمك الأكاديمي في دفعة {batch_row['name']}",
-                            (f"مرحباً {req_data['name']}،\n\n"
-                             f"تم قبول تسجيلك في دفعة: {batch_row['name']}\n"
-                             f"رقمك الأكاديمي: {academic_id_val}\n\n"
-                             "يمكنك تسجيل الدخول بهذا الرقم.\n\nأكاديمية طويق"),
+                        role_label_map = {
+                            'student': 'طالب', 'engineer': 'مهندس',
+                            'admin': 'مشرف', 'مهندس': 'مهندس',
+                            'مشرف': 'مشرف', 'طالب': 'طالب',
+                        }
+                        role_label = role_label_map.get(
+                            (req_data.get('role') or 'student').lower(), 'طالب'
                         )
-                    except Exception:
-                        pass
+                        attachments = None
+                        try:
+                            from pdf_service import generate_welcome_card
+                            _pdf, _ = generate_welcome_card({
+                                'name': req_data['name'],
+                                'universityId': final_university_id,
+                                'academic_id':  final_university_id,
+                                'batch_name':   batch_row['name'] if batch_row else '',
+                                'role_label':   role_label,
+                            })
+                            attachments = [{'filename': f'welcome-{final_university_id}.pdf',
+                                            'content': _pdf, 'mime': 'application/pdf'}]
+                        except Exception as _pe:
+                            print(f'[pdf] welcome_card skip: {_pe}')
+                        send_account_approved(
+                            to_email    = req_data['email'],
+                            student_name= req_data['name'],
+                            academic_id = final_university_id,
+                            batch_name  = batch_row['name'] if batch_row else '',
+                            role_label  = role_label,
+                            attachments = attachments,
+                        )
+                    except Exception as _e:
+                        print(f'[email] account_approved skip: {_e}')
 
                 log_action(admin_id, admin_name, 'موافقة على تسجيل',
                            f"تم قبول تسجيل المستخدم: {req_data['name']}")
         else:
             log_action(admin_id, admin_name, 'رفض تسجيل', f'تم رفض طلب التسجيل رقم {req_id}')
+            if req_data.get('email'):
+                try:
+                    send_registration_rejected(
+                        to_email    = req_data['email'],
+                        student_name= req_data.get('name') or '',
+                        reason      = data.get('reason') or '',
+                    )
+                except Exception as _e:
+                    print(f'[email] registration_rejected skip: {_e}')
 
         conn.commit()
         cursor.close()
@@ -296,6 +333,24 @@ def handle_cart_request(req_id):
                         else:
                             rejected_lst.append({'name': comp_name, 'requested': req_qty})
 
+                    cart_attachments = None
+                    try:
+                        from pdf_service import generate_cart_loan_receipt
+                        _pdf, _ = generate_cart_loan_receipt({
+                            'req_id': req_id,
+                            'student_name': sanitize_text(student_nm),
+                            'university_id': student_id,
+                            'return_date':  expected_return or '',
+                            'admin_name':   sanitize_text(admin_name),
+                            'admin_comment': admin_comment,
+                            'status':       status,
+                            'approved_items': approved_lst,
+                            'rejected_items': rejected_lst,
+                        })
+                        cart_attachments = [{'filename': f'cart-{req_id}.pdf',
+                                             'content': _pdf, 'mime': 'application/pdf'}]
+                    except Exception as _pe:
+                        print(f'[pdf] cart_loan skip: {_pe}')
                     send_loan_receipt(
                         to_email=u['email'],
                         student_name=sanitize_text(student_nm),
@@ -307,6 +362,7 @@ def handle_cart_request(req_id):
                         admin_name=sanitize_text(admin_name),
                         admin_comment=admin_comment,
                         status=status,
+                        attachments=cart_attachments,
                     )
                 else:
                     send_request_decision(
@@ -348,113 +404,153 @@ def delete_cart_request(req_id):
 
 @requests_bp.route('/api/student/cart', methods=['POST'])
 def submit_cart():
+    conn = None
+    cursor = None
     try:
-        data         = request.get_json()
-        student_id   = sanitize_text(data.get('studentId'))
-        student_name = sanitize_text(data.get('studentName'))
-        return_date  = data.get('expectedReturnDate')
+        data         = request.get_json(force=True) or {}
+        student_id   = sanitize_text(data.get('studentId', ''))
+        student_name = sanitize_text(data.get('studentName', ''))
+        return_date  = data.get('expectedReturnDate', '')
         items_list   = data.get('items', [])
-        note         = sanitize_text(data.get('note', '')) or None
+        note_val     = (data.get('note') or '').strip() or None
         today        = date.today().strftime('%Y-%m-%d')
 
+        if not student_id or not return_date or not items_list:
+            return jsonify({'status': 'error', 'message': 'بيانات ناقصة: studentId أو returnDate أو items مفقودة'}), 400
+
         conn   = get_db_connection()
+
+        # ── أنشئ الجداول (مع إصلاح 1932 — InnoDB file مفقود/تالف) ──────────
+        _init = conn.cursor()
+        for _tbl in ('cart_request_items', 'cart_requests'):
+            try:
+                _init.execute(f"SELECT 1 FROM `{_tbl}` LIMIT 1")
+                _init.fetchall()
+            except Exception as _te:
+                if '1932' in str(_te) or "doesn't exist in engine" in str(_te):
+                    print(f'[cart] fixing corrupt table: {_tbl}')
+                    _init.execute(f"DROP TABLE IF EXISTS `{_tbl}`")
+        _init.execute("""
+            CREATE TABLE IF NOT EXISTS cart_requests (
+                id                 INT AUTO_INCREMENT PRIMARY KEY,
+                studentId          VARCHAR(50)  NOT NULL DEFAULT '',
+                studentName        VARCHAR(200) NOT NULL DEFAULT '',
+                requestDate        DATE         NULL,
+                expectedReturnDate DATE         NULL,
+                status             VARCHAR(30)  NOT NULL DEFAULT 'pending',
+                note               TEXT         NULL,
+                created_at         TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        _init.execute("""
+            CREATE TABLE IF NOT EXISTS cart_request_items (
+                id                INT AUTO_INCREMENT PRIMARY KEY,
+                request_id        INT          NOT NULL,
+                componentName     VARCHAR(300) NOT NULL DEFAULT '',
+                requestedQuantity INT          NOT NULL DEFAULT 1,
+                approvedQuantity  INT          NOT NULL DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        _init.close()
+
         cursor = conn.cursor(dictionary=True)
 
-        # ── فحص صلاحيات الدفعة ──────────────────────────────────────────────
-        cursor.execute("""
-            SELECT b.can_borrow, b.auto_approve, b.expires_at, b.name AS batch_name
-            FROM users u
-            LEFT JOIN batches b ON b.id = u.batch_id
-            WHERE u.universityId = %s
-        """, (student_id,))
-        user_batch = cursor.fetchone()
+        # ── فحص صلاحيات الدفعة ─────────────────────────────────────────────
+        user_batch = None
+        try:
+            cursor.execute("""
+                SELECT b.can_borrow, b.auto_approve, b.expires_at, b.name AS batch_name
+                FROM users u
+                LEFT JOIN batches b ON b.id = u.batch_id
+                WHERE u.universityId = %s
+            """, (student_id,))
+            user_batch = cursor.fetchone()
+        except Exception as _be:
+            print(f'[cart] batch check skipped: {_be}')
 
-        if user_batch and user_batch.get('can_borrow') is not None:
-            # الدفعة منتهية؟
+        auto_approve = False
+        if user_batch:
             if user_batch.get('expires_at'):
-                from datetime import date as _date
                 exp = user_batch['expires_at']
                 if hasattr(exp, 'date'):
                     exp = exp.date()
-                if exp < _date.today():
-                    cursor.close(); conn.close()
+                if exp < date.today():
                     return jsonify({
                         'status': 'error',
-                        'message': f'انتهت صلاحية دفعتك ({user_batch["batch_name"]}) ولا يمكن تقديم طلبات جديدة'
+                        'message': f'انتهت صلاحية دفعتك ({user_batch.get("batch_name","")}) ولا يمكن تقديم طلبات جديدة'
                     }), 403
-
-            # الاستعارة مغلقة لهذه الدفعة؟
-            if not user_batch.get('can_borrow', 1):
-                cursor.close(); conn.close()
+            if user_batch.get('can_borrow') is not None and not user_batch.get('can_borrow'):
                 return jsonify({
                     'status': 'error',
-                    'message': f'دفعتك ({user_batch["batch_name"]}) لا تملك صلاحية الاستعارة حالياً'
+                    'message': f'دفعتك ({user_batch.get("batch_name","")}) لا تملك صلاحية الاستعارة حالياً'
                 }), 403
+            auto_approve = bool(user_batch.get('auto_approve', 0))
 
-            # الموافقة التلقائية؟
-            status = 'approved' if user_batch.get('auto_approve', 0) else 'pending'
-        else:
-            status = 'pending'
-        # ────────────────────────────────────────────────────────────────────
+        status = 'approved' if auto_approve else 'pending'
 
-        # auto-migrate: أضف عمود note إن لم يكن موجوداً
-        try:
-            cursor.execute(
-                "ALTER TABLE cart_requests ADD COLUMN IF NOT EXISTS note TEXT NULL"
-            )
-            conn.commit()
-        except Exception:
-            pass
-
+        # ── إدراج الطلب ────────────────────────────────────────────────────
         cursor.execute(
-            "INSERT INTO cart_requests (studentId, studentName, requestDate, expectedReturnDate, status, note) "
-            "VALUES (%s,%s,%s,%s,%s,%s)",
-            (student_id, student_name, today, return_date, status, note),
+            "INSERT INTO cart_requests "
+            "(studentId, studentName, requestDate, expectedReturnDate, status, note) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (student_id, student_name, today, return_date, status, note_val),
         )
         request_id = cursor.lastrowid
 
         for item in items_list:
             cursor.execute(
-                "INSERT INTO cart_request_items (request_id, componentName, requestedQuantity, approvedQuantity) "
-                "VALUES (%s,%s,%s,%s)",
-                (request_id, item['name'], item['qty'], item['qty'] if status == 'approved' else 0),
+                "INSERT INTO cart_request_items "
+                "(request_id, componentName, requestedQuantity, approvedQuantity) "
+                "VALUES (%s, %s, %s, %s)",
+                (request_id, item['name'], item['qty'],
+                 item['qty'] if status == 'approved' else 0),
             )
 
-        # ── إذا كانت الموافقة تلقائية: أنشئ عهداً فعلياً واخصم الكمية فوراً ──
+        # ── موافقة تلقائية: أنشئ عهداً وخصم الكمية فوراً ──────────────────
         if status == 'approved':
             for item in items_list:
                 cursor.execute("SELECT quantity FROM items WHERE name=%s", (item['name'],))
                 stock = cursor.fetchone()
-                if stock and stock['quantity'] >= item['qty']:
-                    cursor.execute(
-                        "INSERT INTO loans "
-                        "(university_id, item_name, qty, checkout_date, expected_return_date, status) "
-                        "VALUES (%s,%s,%s,%s,%s,'نشط')",
-                        (student_id, item['name'], item['qty'], today, return_date),
-                    )
-                    cursor.execute(
-                        "UPDATE items SET quantity=quantity-%s WHERE name=%s",
-                        (item['qty'], item['name']),
-                    )
-                else:
+                if not stock or stock['quantity'] < item['qty']:
                     conn.rollback()
-                    cursor.close(); conn.close()
                     return jsonify({
                         'status': 'error',
                         'message': f'الكمية غير كافية للقطعة: {item["name"]}'
                     }), 400
-        # ─────────────────────────────────────────────────────────────────────
+                cursor.execute(
+                    "INSERT INTO loans "
+                    "(university_id, item_name, qty, checkout_date, expected_return_date, status) "
+                    "VALUES (%s, %s, %s, %s, %s, 'نشط')",
+                    (student_id, item['name'], item['qty'], today, return_date),
+                )
+                cursor.execute(
+                    "UPDATE items SET quantity = quantity - %s WHERE name = %s",
+                    (item['qty'], item['name']),
+                )
 
         conn.commit()
-        cursor.close()
-        conn.close()
 
         log_action(student_id, student_name, 'إنشاء طلب استعارة',
                    f'قام الطالب بطلب {len(items_list)} نوع من القطع — الحالة: {status}')
-        msg = 'تمت الموافقة التلقائية على طلبك ✅' if status == 'approved' else 'تمت العملية بنجاح'
+        msg = 'تمت الموافقة التلقائية على طلبك ✅' if status == 'approved' else 'تم إرسال طلبك بنجاح'
         return jsonify({'status': 'success', 'message': msg, 'request_status': status}), 201
+
     except Exception as exc:
+        import traceback; traceback.print_exc()
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
         return jsonify({'status': 'error', 'message': str(exc)}), 500
+    finally:
+        try:
+            if cursor: cursor.close()
+        except Exception:
+            pass
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
 
 
 @requests_bp.route('/api/student/request/<int:req_id>', methods=['DELETE'])
@@ -479,8 +575,40 @@ def delete_student_request(req_id):
 def get_my_requests(student_id):
     try:
         conn   = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
 
+        # أنشئ الجداول (مع إصلاح 1932 — InnoDB file مفقود/تالف)
+        _init = conn.cursor()
+        for _tbl in ('cart_request_items', 'cart_requests'):
+            try:
+                _init.execute(f"SELECT 1 FROM `{_tbl}` LIMIT 1")
+                _init.fetchall()
+            except Exception as _te:
+                if '1932' in str(_te) or "doesn't exist in engine" in str(_te):
+                    _init.execute(f"DROP TABLE IF EXISTS `{_tbl}`")
+        _init.execute("""
+            CREATE TABLE IF NOT EXISTS cart_requests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                studentId VARCHAR(50) NOT NULL DEFAULT '',
+                studentName VARCHAR(200) NOT NULL DEFAULT '',
+                requestDate DATE NULL,
+                expectedReturnDate DATE NULL,
+                status VARCHAR(30) NOT NULL DEFAULT 'pending',
+                note TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        _init.execute("""
+            CREATE TABLE IF NOT EXISTS cart_request_items (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                request_id INT NOT NULL,
+                componentName VARCHAR(300) NOT NULL DEFAULT '',
+                requestedQuantity INT NOT NULL DEFAULT 1,
+                approvedQuantity INT NOT NULL DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        _init.close()
+
+        cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM cart_requests WHERE studentId=%s ORDER BY id DESC", (student_id,))
         requests_data = cursor.fetchall()
         for req in requests_data:
@@ -496,22 +624,25 @@ def get_my_requests(student_id):
             """, (req['id'],))
             req['items'] = cursor.fetchall()
 
-        cursor.execute("""
-            SELECT l.id,
-                   l.item_name AS componentName,
-                   COALESCE(i.name_en, l.item_name) AS name_en,
-                   l.qty AS quantity,
-                   l.checkout_date AS borrowDate,
-                   l.expected_return_date AS expectedReturnDate,
-                   l.status
-            FROM loans l
-            LEFT JOIN items i ON i.name = l.item_name
-            WHERE l.university_id=%s ORDER BY l.id DESC
-        """, (student_id,))
-        loans_data = cursor.fetchall()
+        try:
+            cursor.execute("""
+                SELECT l.id,
+                       l.item_name AS componentName,
+                       COALESCE(i.name_en, l.item_name) AS name_en,
+                       l.qty AS quantity,
+                       l.checkout_date AS borrowDate,
+                       l.expected_return_date AS expectedReturnDate,
+                       l.status
+                FROM loans l
+                LEFT JOIN items i ON i.name = l.item_name
+                WHERE l.university_id=%s ORDER BY l.id DESC
+            """, (student_id,))
+            loans_data = cursor.fetchall()
+        except Exception:
+            loans_data = []
         for loan in loans_data:
-            if loan['borrowDate']:         loan['borrowDate']         = str(loan['borrowDate'])
-            if loan['expectedReturnDate']: loan['expectedReturnDate'] = str(loan['expectedReturnDate'])
+            if loan.get('borrowDate'):         loan['borrowDate']         = str(loan['borrowDate'])
+            if loan.get('expectedReturnDate'): loan['expectedReturnDate'] = str(loan['expectedReturnDate'])
 
         cursor.close()
         conn.close()

@@ -594,11 +594,8 @@ const AdminInventory = () => {
   };
 
   const printInventory = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    const rows = filteredItems.map(c => `<tr><td>${displayCompName(c)}</td><td>${lang === 'ar' ? getCatAr(c) : getCatEn(c)}</td><td style="text-align:center;font-weight:900;color:${c.quantity === 0 ? '#dc2626' : c.quantity < 5 ? '#f97316' : '#16a34a'}">${c.quantity}</td><td>${c.location_ids?.map(id => getFullLocationPath(id)).join(' | ') || c.location || '—'}</td></tr>`).join('');
-    printWindow.document.write(`<html dir="${lang === 'ar' ? 'rtl' : 'ltr'}"><head><title>${t('تقرير المخزون', 'Inventory Report')}</title><style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #e2e8f0;padding:8px 12px;font-size:13px}th{background:#f8fafc;font-weight:900}h1{color:#1d4ed8}@media print{body{padding:0}}</style></head><body><h1>📦 ${t('تقرير المخزون', 'Inventory Report')} — ${new Date().toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}</h1><table><thead><tr><th>${t('اسم القطعة', 'Item')}</th><th>${t('التصنيف', 'Category')}</th><th>${t('الكمية', 'Qty')}</th><th>${t('الموقع', 'Location')}</th></tr></thead><tbody>${rows}</tbody></table><script>setTimeout(()=>{window.print();window.close();},500);</script></body></html>`);
-    printWindow.document.close();
+    // Unified backend PDF (branded header + QR verification footer).
+    window.open(apiUrl('/api/pdf/inventory'), '_blank');
   };
 
   // ✅ بحث عكسي محسن — يعمل مع اسم القطعة والمكان

@@ -1,5 +1,6 @@
 import csv
 import io
+import os
 
 from flask import Blueprint, Response, jsonify, request
 
@@ -7,7 +8,7 @@ from database import get_db_connection
 from utils.helpers import hash_password, sanitize_text, get_admin_info
 from utils.audit import log_action
 from utils.security import get_blocked_ips, get_all_failed, unblock_ip
-from email_service import send_custom_email, send_overdue_reminder
+from email_service import send_custom_email, send_overdue_reminder, send_admin_digest
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -19,10 +20,34 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.route('/api/admin/audit-logs', methods=['GET'])
 def get_audit_logs():
     try:
-        limit = int(request.args.get('limit', 500))
+        limit       = min(int(request.args.get('limit', 500) or 500), 5000)
+        admin_id    = sanitize_text(request.args.get('adminId') or '')
+        action      = sanitize_text(request.args.get('action') or '')
+        date_from   = sanitize_text(request.args.get('from') or '')
+        date_to     = sanitize_text(request.args.get('to') or '')
+        search      = sanitize_text(request.args.get('q') or '')
+
+        conditions = []
+        params: list = []
+        if admin_id:
+            conditions.append("admin_id = %s"); params.append(admin_id)
+        if action:
+            conditions.append("action LIKE %s"); params.append(f"%{action}%")
+        if date_from:
+            conditions.append("created_at >= %s"); params.append(date_from)
+        if date_to:
+            conditions.append("created_at <= %s"); params.append(date_to + ' 23:59:59')
+        if search:
+            conditions.append("(action LIKE %s OR details LIKE %s OR admin_name LIKE %s)")
+            params.extend([f"%{search}%"] * 3)
+
+        where_sql = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
+        sql = f"SELECT * FROM audit_logs {where_sql} ORDER BY created_at DESC LIMIT %s"
+        params.append(limit)
+
         conn   = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(f"SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT {limit}")
+        cursor.execute(sql, tuple(params))
         logs = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -32,6 +57,25 @@ def get_audit_logs():
                 log['created_at'] = log['created_at'].isoformat()
 
         return jsonify({'status': 'success', 'data': logs}), 200
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
+@admin_bp.route('/api/admin/audit-logs/export-csv', methods=['GET'])
+def export_audit_logs_csv():
+    try:
+        conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT created_at AS 'التاريخ',
+                   admin_id   AS 'معرّف المنفذ',
+                   admin_name AS 'الاسم',
+                   action     AS 'الإجراء',
+                   details    AS 'التفاصيل'
+            FROM audit_logs ORDER BY created_at DESC LIMIT 10000
+        """)
+        rows = cursor.fetchall()
+        cursor.close(); conn.close()
+        return _rows_to_csv(rows, 'audit_logs.csv')
     except Exception as exc:
         return jsonify({'status': 'error', 'message': str(exc)}), 500
 
@@ -429,6 +473,89 @@ def export_inventory_csv():
         return jsonify({'status': 'error', 'message': str(exc)}), 500
 
 
+def _rows_to_csv(rows, filename: str):
+    """Helper: turn list-of-dict rows into a CSV Response with Arabic BOM."""
+    output = io.StringIO()
+    output.write('\ufeff')
+    if rows:
+        writer = csv.DictWriter(output, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({k: ('' if v is None else v) for k, v in r.items()})
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename={filename}'},
+    )
+
+
+@admin_bp.route('/api/admin/export/loans-csv', methods=['GET'])
+def export_loans_csv():
+    try:
+        conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT l.university_id AS 'الرقم الأكاديمي',
+                   u.name          AS 'اسم الطالب',
+                   l.item_name     AS 'القطعة',
+                   l.qty           AS 'الكمية',
+                   l.checkout_date AS 'تاريخ الاستلام',
+                   l.expected_return_date AS 'تاريخ الإرجاع المتوقع',
+                   l.status        AS 'الحالة'
+            FROM loans l LEFT JOIN users u ON u.universityId = l.university_id
+            ORDER BY l.id DESC
+        """)
+        rows = cursor.fetchall()
+        cursor.close(); conn.close()
+        return _rows_to_csv(rows, 'loans.csv')
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
+@admin_bp.route('/api/admin/export/students-csv', methods=['GET'])
+def export_students_csv():
+    try:
+        conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT u.universityId AS 'الرقم الأكاديمي',
+                   u.name         AS 'الاسم',
+                   u.role         AS 'الصفة',
+                   u.email        AS 'الإيميل',
+                   u.phone        AS 'الجوال',
+                   b.name         AS 'الدفعة',
+                   IF(u.is_banned=1,'محظور','نشط') AS 'حالة الحساب'
+            FROM users u LEFT JOIN batches b ON b.id = u.batch_id
+            ORDER BY u.role, u.universityId
+        """)
+        rows = cursor.fetchall()
+        cursor.close(); conn.close()
+        return _rows_to_csv(rows, 'students.csv')
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
+@admin_bp.route('/api/admin/export/requests-csv', methods=['GET'])
+def export_requests_csv():
+    try:
+        conn = get_db_connection(); cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT cr.id          AS 'رقم الطلب',
+                   cr.studentId   AS 'الرقم الأكاديمي',
+                   cr.studentName AS 'اسم الطالب',
+                   cr.requestDate AS 'تاريخ الطلب',
+                   cr.expectedReturnDate AS 'تاريخ الإرجاع',
+                   COALESCE(cr.status,'pending') AS 'الحالة',
+                   (SELECT GROUP_CONCAT(CONCAT(cri.componentName,' x',cri.requestedQuantity) SEPARATOR ' | ')
+                    FROM cart_request_items cri WHERE cri.request_id = cr.id) AS 'القطع'
+            FROM cart_requests cr
+            ORDER BY cr.id DESC
+        """)
+        rows = cursor.fetchall()
+        cursor.close(); conn.close()
+        return _rows_to_csv(rows, 'requests.csv')
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
 # ──────────────────────────────────────────────
 # Email management
 # ──────────────────────────────────────────────
@@ -520,6 +647,121 @@ def send_overdue_reminders():
                    f'تم إرسال {sent} تذكير، تخطي {skipped} (بدون إيميل)')
         return jsonify({'status': 'success', 'sent': sent, 'skipped': skipped,
                         'message': f'تم إرسال {sent} تذكير بنجاح'}), 200
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
+# ──────────────────────────────────────────────
+# Admin daily digest
+# ──────────────────────────────────────────────
+
+@admin_bp.route('/api/admin/send-daily-digest', methods=['POST'])
+def send_daily_digest():
+    """
+    Send a daily-summary email.
+    Body (optional):
+      - target: 'self' | 'all' | 'specific'   (default: 'self' → lab email)
+      - adminIds: ['ADM001', ...]             (only when target='specific')
+    """
+    try:
+        payload = request.get_json(silent=True) or {}
+        target = (payload.get('target') or 'self').lower()
+        admin_filter = payload.get('adminIds') or []
+
+        conn   = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        def _count(sql):
+            try:
+                cursor.execute(sql); row = cursor.fetchone()
+                return int((row or {}).get('count') or 0)
+            except Exception:
+                return 0
+
+        pending_reg   = _count("SELECT COUNT(*) AS count FROM registration_requests WHERE status='pending'")
+        pending_cart  = _count("SELECT COUNT(*) AS count FROM cart_requests WHERE status='pending'")
+        pending_items = _count("SELECT COUNT(*) AS count FROM item_requests WHERE status='pending'")
+
+        # Overdue loans
+        overdue_loans = []
+        try:
+            cursor.execute("""
+                SELECT u.name AS student_name, l.item_name,
+                       DATEDIFF(CURDATE(),
+                         COALESCE(
+                           STR_TO_DATE(l.expected_return_date,'%Y-%m-%d'),
+                           STR_TO_DATE(l.expected_return_date,'%Y/%m/%d'),
+                           STR_TO_DATE(l.expected_return_date,'%d-%m-%Y'),
+                           STR_TO_DATE(l.expected_return_date,'%d/%m/%Y')
+                         )
+                       ) AS days_overdue
+                FROM loans l LEFT JOIN users u ON u.universityId = l.university_id
+                WHERE l.status IN ('نشط','متأخر')
+                HAVING days_overdue > 0
+                ORDER BY days_overdue DESC
+                LIMIT 20
+            """)
+            overdue_loans = cursor.fetchall() or []
+        except Exception as _e:
+            print(f'[digest] overdue query skip: {_e}')
+
+        # Low stock (≤ 3)
+        low_stock = []
+        try:
+            cursor.execute("SELECT name, quantity FROM items WHERE quantity <= 3 ORDER BY quantity ASC LIMIT 20")
+            low_stock = cursor.fetchall() or []
+        except Exception as _e:
+            print(f'[digest] low_stock query skip: {_e}')
+
+        # Determine recipients based on target
+        if target == 'self':
+            lab_email = os.getenv('EMAIL_SENDER', '')
+            if not lab_email:
+                cursor.close(); conn.close()
+                return jsonify({'status': 'error',
+                                'message': 'EMAIL_SENDER غير مضبوط في .env'}), 400
+            admins = [{'name': 'إدارة المعمل', 'email': lab_email}]
+        elif target == 'specific' and admin_filter:
+            placeholders = ','.join(['%s'] * len(admin_filter))
+            cursor.execute(
+                f"SELECT name, email FROM users WHERE role='admin' AND universityId IN ({placeholders}) AND email IS NOT NULL AND email <> ''",
+                tuple(admin_filter),
+            )
+            admins = cursor.fetchall() or []
+        else:
+            cursor.execute(
+                "SELECT name, email FROM users WHERE role='admin' AND email IS NOT NULL AND email <> ''"
+            )
+            admins = cursor.fetchall() or []
+        cursor.close()
+        conn.close()
+
+        sent = skipped = 0
+        for a in admins:
+            try:
+                result = send_admin_digest(
+                    to_email              = a['email'],
+                    admin_name            = a.get('name') or 'المشرف',
+                    pending_registrations = pending_reg,
+                    pending_cart_requests = pending_cart,
+                    pending_item_requests = pending_items,
+                    overdue_loans         = overdue_loans,
+                    low_stock_items       = low_stock,
+                )
+                if result.get('success'):
+                    sent += 1
+                else:
+                    skipped += 1
+            except Exception as _e:
+                print(f'[digest] send failed for {a.get("email")}: {_e}')
+                skipped += 1
+
+        return jsonify({
+            'status': 'success',
+            'sent': sent,
+            'skipped': skipped,
+            'message': f'تم إرسال الملخص إلى {sent} مشرف',
+        }), 200
     except Exception as exc:
         return jsonify({'status': 'error', 'message': str(exc)}), 500
 

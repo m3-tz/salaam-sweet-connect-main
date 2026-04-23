@@ -81,14 +81,54 @@
     --fw-black: 900;
   }
 
-  /* ─── Dark Mode Overrides ───────────────────────────────────────────── */
-  [data-theme="dark"] {
-    --background: 210 10% 6%;
+  /* ─── Dark Mode Overrides (Tailwind class-based) ──────────────────── */
+  .dark {
+    --background: 222 47% 6%;
     --foreground: 210 20% 95%;
-    --card: 222 47% 11%;
+
+    --card: 222 47% 9%;
     --card-foreground: 210 20% 95%;
-    --muted: 215 30% 25%;
-    --muted-foreground: 215 14% 65%;
+
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 199 89% 55%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 199 89% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 222 47% 11%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 222 47% 11%;
+
+    --border: 217 33% 18%;
+    --input: 217 33% 18%;
+    --ring: 199 89% 48%;
+
+    /* Sidebar darker in dark mode */
+    --sidebar-background: 222 47% 4%;
+    --sidebar-foreground: 210 30% 88%;
+    --sidebar-accent: 217 33% 14%;
+    --sidebar-border: 217 33% 12%;
+
+    /* Location badge stays consistent */
+    --loc-bg: 217 33% 6%;
+    --loc-fg: 216 96% 80%;
+    --loc-text: 216 98% 92%;
+    --loc-border: 219 86% 60%;
+    --loc-sep: 217 100% 65%;
   }
 }
 

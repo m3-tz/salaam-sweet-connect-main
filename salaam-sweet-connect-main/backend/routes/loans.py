@@ -5,6 +5,8 @@ from flask import Blueprint, jsonify, request
 from database import get_db_connection
 from utils.helpers import get_admin_info
 from utils.audit import log_action
+from email_service import send_return_confirmation
+from pdf_service   import generate_loan_return_certificate
 
 loans_bp = Blueprint('loans', __name__)
 
@@ -77,7 +79,15 @@ def return_loan(loan_id):
         condition    = data.get('condition', 'good')
 
         conn   = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
+
+        # fetch student contact BEFORE update
+        cursor.execute("""
+            SELECT l.university_id, u.name AS student_name, u.email
+            FROM loans l LEFT JOIN users u ON u.universityId = l.university_id
+            WHERE l.id=%s
+        """, (loan_id,))
+        loan_row = cursor.fetchone() or {}
 
         if condition == 'damaged':
             cursor.execute("UPDATE loans SET status='صيانة' WHERE id=%s", (loan_id,))
@@ -94,7 +104,132 @@ def return_loan(loan_id):
         conn.commit()
         cursor.close()
         conn.close()
+
+        if loan_row.get('email'):
+            try:
+                attachments = None
+                try:
+                    pdf_bytes, _ = generate_loan_return_certificate({
+                        'id': loan_id,
+                        'student_name': loan_row.get('student_name') or '',
+                        'university_id': loan_row.get('university_id'),
+                        'item_name': item_name,
+                        'quantity': quantity,
+                        'condition': condition,
+                        'admin_name': admin_name or '',
+                    })
+                    attachments = [{
+                        'filename': f'return-{loan_id}.pdf',
+                        'content':  pdf_bytes,
+                        'mime':     'application/pdf',
+                    }]
+                except Exception as _pe:
+                    print(f'[pdf] return cert skip: {_pe}')
+                send_return_confirmation(
+                    to_email    = loan_row['email'],
+                    student_name= loan_row.get('student_name') or '',
+                    item_name   = item_name,
+                    quantity    = quantity,
+                    condition   = condition,
+                    admin_name  = admin_name or '',
+                    attachments = attachments,
+                )
+            except Exception as _e:
+                print(f'[email] return_confirmation skip: {_e}')
+
         return jsonify({'status': 'success', 'message': msg}), 200
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
+@loans_bp.route('/api/loans/return-bulk', methods=['POST'])
+def return_loans_bulk():
+    """
+    Bulk return: one atomic DB pass, ONE email with ONE PDF listing all items.
+    Payload: { "loans": [{"id": int, "itemName": str, "quantity": int, "condition": "good"|"damaged"}, ...] }
+    """
+    try:
+        data      = request.get_json() or {}
+        loans_in  = data.get('loans') or []
+        if not loans_in:
+            return jsonify({'status': 'error', 'message': 'no loans'}), 400
+        admin_id, admin_name = get_admin_info()
+
+        conn   = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        ids = [int(l['id']) for l in loans_in]
+        fmt = ','.join(['%s'] * len(ids))
+        cursor.execute(f"""
+            SELECT l.id, l.university_id, u.name AS student_name, u.email
+            FROM loans l LEFT JOIN users u ON u.universityId = l.university_id
+            WHERE l.id IN ({fmt})
+        """, ids)
+        loan_rows = cursor.fetchall()
+        by_id     = {r['id']: r for r in loan_rows}
+        student   = next((r for r in loan_rows if r.get('email')), None) or (loan_rows[0] if loan_rows else {})
+
+        processed = []
+        for l in loans_in:
+            lid, item, qty, cond = int(l['id']), l.get('itemName'), int(l.get('quantity') or 1), l.get('condition', 'good')
+            if cond == 'damaged':
+                cursor.execute("UPDATE loans SET status='صيانة' WHERE id=%s", (lid,))
+                log_action(admin_id, admin_name, 'تحويل للصيانة',
+                           f'تم استلام {qty} من {item} بحالة تالفة/للمعاينة')
+            else:
+                cursor.execute("UPDATE loans SET status='مُرجع' WHERE id=%s", (lid,))
+                cursor.execute("UPDATE items SET quantity=quantity+%s WHERE name=%s", (qty, item))
+                log_action(admin_id, admin_name, 'إرجاع عهدة سليمة',
+                           f'تم استلام وإرجاع {qty} من {item} للمخزون')
+            processed.append({'item_name': item, 'quantity': qty, 'condition': cond})
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if student.get('email'):
+            try:
+                attachments = None
+                try:
+                    pdf_bytes, _ = generate_loan_return_certificate({
+                        'id': f'bulk-{ids[0]}',
+                        'student_name':  student.get('student_name') or '',
+                        'university_id': student.get('university_id'),
+                        'admin_name':    admin_name or '',
+                        'items':         processed,
+                    })
+                    attachments = [{
+                        'filename': f'returns-{student.get("university_id","bulk")}.pdf',
+                        'content':  pdf_bytes,
+                        'mime':     'application/pdf',
+                    }]
+                except Exception as _pe:
+                    print(f'[pdf] bulk return cert skip: {_pe}')
+
+                # Build a single summary email body
+                items_list = '\n'.join(f"• {p['item_name']} (x{p['quantity']}) — "
+                                       f"{'تالفة' if p['condition']=='damaged' else 'سليمة'}"
+                                       for p in processed)
+                any_damaged = any(p['condition'] == 'damaged' for p in processed)
+                from email_service import _send_email  # reuse low-level sender to get one email
+                subject = ('تأكيد إرجاع قطع — تحويل للصيانة 🔧' if any_damaged
+                           else 'تأكيد إرجاع القطع ✅')
+                html = f"""
+                <div style="font-family:Tahoma,Arial,sans-serif;direction:rtl;text-align:right;max-width:560px;margin:auto;padding:20px;background:#f8fafc">
+                  <h2 style="color:#0f3b66">تم استلام عهدك ✅</h2>
+                  <p>مرحباً {student.get('student_name') or ''}،</p>
+                  <p>تم استلام القطع التالية ({len(processed)}):</p>
+                  <pre style="background:#fff;padding:12px;border:1px solid #e5e7eb;border-radius:8px;white-space:pre-wrap">{items_list}</pre>
+                  <p style="color:#6b7280;font-size:13px">نسخة PDF مرفقة للتوقيع.</p>
+                </div>
+                """
+                _send_email(student['email'], subject, html, attachments=attachments)
+            except Exception as _e:
+                print(f'[email] bulk return skip: {_e}')
+
+        return jsonify({'status': 'success',
+                        'message': f'تم استلام {len(processed)} قطعة',
+                        'count':   len(processed)}), 200
     except Exception as exc:
         return jsonify({'status': 'error', 'message': str(exc)}), 500
 

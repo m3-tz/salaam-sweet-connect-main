@@ -17,6 +17,7 @@ from email_service import (
     send_otp_email,
     generate_otp,
     send_custom_email,
+    send_password_changed,
 )
 
 auth_bp = Blueprint('auth', __name__)
@@ -346,7 +347,9 @@ def reset_password_otp():
             return jsonify({'status': 'error', 'message': 'انتهت صلاحية الرمز، اطلب رمزاً جديداً'}), 400
 
         conn   = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT name, email FROM users WHERE universityId = %s", (university_id,))
+        user_row = cursor.fetchone() or {}
         cursor.execute("UPDATE users SET password = %s WHERE universityId = %s",
                        (hash_password(new_password), university_id))
         conn.commit()
@@ -355,6 +358,17 @@ def reset_password_otp():
 
         del _otp_store[university_id]
         log_action(university_id, 'النظام', 'إعادة تعيين كلمة المرور', 'تم التعيين عبر OTP')
+
+        if user_row.get('email'):
+            try:
+                send_password_changed(
+                    to_email    = user_row['email'],
+                    student_name= user_row.get('name') or '',
+                    method      = 'otp',
+                )
+            except Exception as _e:
+                print(f'[email] password_changed skip: {_e}')
+
         return jsonify({'status': 'success', 'message': 'تم تعيين كلمة المرور الجديدة بنجاح'}), 200
     except Exception as exc:
         return jsonify({'status': 'error', 'message': str(exc)}), 500

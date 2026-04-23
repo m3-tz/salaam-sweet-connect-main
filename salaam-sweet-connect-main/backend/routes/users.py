@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from database import get_db_connection
 from utils.helpers import hash_password, sanitize_text, get_admin_info
 from utils.audit import log_action
+from email_service import send_password_changed
 
 users_bp = Blueprint('users', __name__)
 
@@ -141,7 +142,9 @@ def reset_password(univ_id):
     try:
         admin_id, admin_name = get_admin_info()
         conn   = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT name, email FROM users WHERE universityId=%s", (univ_id,))
+        user_row = cursor.fetchone() or {}
         cursor.execute(
             "UPDATE users SET password=%s WHERE universityId=%s",
             (hash_password(univ_id), univ_id),
@@ -152,6 +155,17 @@ def reset_password(univ_id):
 
         log_action(admin_id, admin_name, 'إعادة ضبط كلمة مرور',
                    f'تم تعيين كلمة المرور للافتراضية للمستخدم: {univ_id}')
+
+        if user_row.get('email'):
+            try:
+                send_password_changed(
+                    to_email    = user_row['email'],
+                    student_name= user_row.get('name') or '',
+                    method      = 'admin',
+                )
+            except Exception as _e:
+                print(f'[email] password_changed (admin) skip: {_e}')
+
         return jsonify({'status': 'success', 'message': 'تم إعادة ضبط كلمة المرور'}), 200
     except Exception as exc:
         return jsonify({'status': 'error', 'message': str(exc)}), 500
