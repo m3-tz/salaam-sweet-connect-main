@@ -15,6 +15,7 @@ from routes.permissions   import permissions_bp
 from routes.item_requests import item_requests_bp
 from routes.boxes         import boxes_bp
 from routes.pdfs          import pdfs_bp
+from routes.ai            import ai_bp
 from utils.limiter        import limiter
 from utils.scheduler      import start_scheduler
 
@@ -98,7 +99,7 @@ def create_app() -> Flask:
     # ── Register blueprints ───────────────────────────────────────────────
     for bp in (auth_bp, users_bp, items_bp, loans_bp, camps_bp,
                requests_bp, locations_bp, batches_bp, admin_bp,
-               permissions_bp, item_requests_bp, boxes_bp, pdfs_bp):
+               permissions_bp, item_requests_bp, boxes_bp, pdfs_bp, ai_bp):
         app.register_blueprint(bp)
 
     @app.route('/')
